@@ -883,9 +883,180 @@ controls and derived cases were all refused by the router-rule policy's code 6. 
 before installation. Their limits are the spending-limit Wasm's archival around 6 November
 (section 18) and the Blend emission window ending 2 November (section 19).
 
+Sections 21, 22 and 23, after this one, add a W1, a W2 and a W3 run at revision `86854cee` on
+1 November 2026, each passing under [§7's definition](#what-a-passing-permitdeny-report-is) with
+the same derived-denial cases, enforcers and codes as sections 17–19, including both deadline
+denials with the router-rule policy's code 6. The release still has to be tagged; these are
+reports at revision `86854cee`, not a claim about the delivered release. The same two limits
+apply: the emission window ends on 2 November and the spending-limit Wasm stays live until
+about 6 November.
+
 Phase 2 still needs walkthrough and wallet reports at the final delivered revision, a human
 owner's protected approval in the wallet's install and revoke flow,
 a reviewed Blend adapter rather than an `evidence_only` code observation, the remaining harness
 layers with their actual evidence boundaries, hosted-service deployment
 evidence, and the public demonstration/video. The controlled W1, W2 and W3 runs do not close
 those requirements. See [SCOPE.md](SCOPE.md) for the implementation map.
+
+## 21. Controlled Blend claim run, 1 November 2026
+
+The [allowlisted run summary](evidence/testnet-blend-claim-derived-2026-11-01.json) records a
+complete [W1 harness execution](WALKTHROUGH-PROTOCOLS.md#w1-blend) from 16:08:52 to 16:36:06 UTC,
+with exit 0. The checkout was clean at `86854cee322e25ef52db8ad42c7e083cf56a481e`. The external
+CLI and the native worker were built from it just before the run; the CLI's byte digest is
+retained in the provenance and identifies the executable, not its source. The owner was a
+throwaway ed25519 key, and the single rule was approved in the explicit operator mode without a
+human prompt. The keys were deleted when the run ended. The summary is the wrapper's own export.
+
+The selected account was `CCNCW23M3KOQ7P3RZB4KAWD3NUKSDNBDXNGTXWUW3BDZ2DZHSO5SSXX3`. The grant
+was one one-call rule (account rule ID 1) for `claim(self, [3], self)` on the same Blend v2 pool
+as section 10, valid until ledger 5505460.
+
+Values marked *(journal)* come from the run's retained local `run.json`, not the published
+summary.
+
+| Observation | Recorded result |
+| --- | --- |
+| Emission window and preflight | The refresh recorded `not_needed`, so no `gulp_emissions` was sent. *(journal)* The emission on ID 3 was the section 19 schedule, live until 2 November 2026, 04:23:17 UTC. The preflight passed at 5505143, with an expected owner claim of 210 BLND base units and a quote of 1555296222 USDC base units for 200 XLM. |
+| Position | The payer sent 200 XLM to the account, the owner swapped them on the pinned Soroswap router, then [supplied](https://stellar.expert/explorer/testnet/tx/030e4afcb68c49d76d10280c4dab8b39b0c0ba7d71efa6c504b995ed143b5c7f) exactly 100000000 USDC base units at 5505146. *(journal)* The swap returned 1555296222 USDC base units, and the supply showed 99888627 bTokens. |
+| Owner recording and artifact chain | After the 12-ledger wait, the [owner claim](https://stellar.expert/explorer/testnet/tx/a59c0b8369f5a7ee3e2009e5f8c849b8aff29453c90bcc0081abf40011145659) confirmed at 5505160 with 245 BLND base units and a matching balance increase. It went through the real RPC recorder, synthesis, the 25-case reference suite, and generation/build with matching source/Wasm/manifest reproduction. |
+| Account-Wasm report | Before installation, the offline `ozpb dry-run` report permitted the original claim and reverted 19 derived denials (25 cases) in the pinned account and generated policy Wasm. Synthetic local state; the pool itself is not executed offline. |
+| Install | The [rule](https://stellar.expert/explorer/testnet/tx/e88c9f0ec4bec0761305445b1e79fdfa7fd86d65b3e9ce1fea0f5e7be174ff76) was checked at 5505164, rechecked at 5505165, installed at 5505166 and read back matched at 5505166. |
+| Derived denials | The CLI emitted the installed spec's 25-case suite and the replay verified its suite hash. The recorded claim (`case-0`) was permitted in simulation at 5505166. All five live-realizable deny cases were refused at 5505167 by the predicted enforcer. The 14 deny cases that stay offline are listed by class and reason, and the 5 other permit cases stay layer-1 only. Nothing was submitted. |
+| Claim controls | A different reserve token list and a foreign recipient each returned the generated policy's code 6; the pool's `submit` returned its code 5. A wrong signer returned the account's 3016; an empty signer set returned the policy's code 1. All at 5505168–5505169. |
+| Delegated claim and count cap | After the accrual wait, the [delegated claim](https://stellar.expert/explorer/testnet/tx/c91173f75a00d8145d2ea16f25677aa74118989aa7f7774662990214575d09fd) confirmed at 5505173 with 227 BLND base units and a matching balance increase. The repeat returned the policy's code 7 at 5505173. |
+| Expiry | After the wait reached ledger 5505461 (the grant's last valid ledger plus one), the account returned `UnvalidatedContext` (3002) at 5505461. |
+| Owner removal | The [removal](https://stellar.expert/explorer/testnet/tx/b5f500e449f8a07c03332d4b4054f0711aaecc45d9e11b87292d92b179abdeb5) confirmed at 5505463. Its event matched, the rule read back absent, and the policy reported uninstalled. |
+| Post-removal control | The account's missing-rule code 3000 at 5505463. |
+| Withdrawal | The owner [withdrew](https://stellar.expert/explorer/testnet/tx/13bfa08ee028769037cad3ee9afc3630692429d9dd2e87a69a57bee4ca81809a) the supply at 5505465, and the account's positions read back empty. *(journal)* 99999999 USDC base units were returned. |
+
+The derived denials are the section 12 and 19 cases with the same enforcers: `case-2` (the
+suite's absent `claim_x`, realized as the pool's `submit`, generated policy #5), `case-6`
+(stranger `to`, #6), `case-10` (empty signer set, #1), and `case-11` and `case-13`
+(unrecognized signer; delegate plus an unrecognized signer; the account's 3016). The same 14
+deny cases stay offline as in section 12.
+
+This W1 report passes under [§7's definition](#what-a-passing-permitdeny-report-is), again at
+exactly the minimum of five denials, which are four distinct live checks. All 12 control steps
+completed, the position was withdrawn, and the wrapper finalized with exit 0. The run submitted
+twelve transactions. Independent read-only checks after the run found all twelve receipts
+`SUCCESS`, and at ledger 5505481 the owner rule present, rule 1 absent (3000) and the account
+code unchanged. An offline re-export matched the saved summary.
+
+**Limit: the emission window.** This run used the same emission schedule as section 19, so the
+preflight refuses W1 from about 02:23 UTC on 2 November 2026 unless the schedule is renewed;
+this harness's own `gulp_emissions` refresh was refused in a read-only simulation on
+21 October. The claimed BLND (472 base units), the swap's surplus USDC (1455296222 base units at
+this quote) and the withdrawn USDC stay on the throwaway account. No reviewed Blend adapter was
+involved: the pool's code hash in the spec is an `evidence_only` observation. These remain
+editable local RPC observations, with non-atomic reads and no ledger proof or protected
+wallet-approval claim.
+
+## 22. Controlled SEP-41 run, 1 November 2026
+
+The [allowlisted run summary](evidence/testnet-subscription-derived-2026-11-01.json) records a
+complete W2 harness execution from 16:36:17 to 16:40:13 UTC, with exit 0. The checkout was clean
+at `86854cee322e25ef52db8ad42c7e083cf56a481e`, and the CLI was the section 21 build; its byte
+digest is retained in the provenance. The owner was a throwaway ed25519 key, and confirmation
+used the explicit operator mode without a human prompt. The keys were deleted when the run ended.
+The summary is the wrapper's own export.
+
+The selected account was `CBLE6SZDAPLCF5LDTQD2SHPH5J4VUA3BJPQ4SXVRVLG66SUV3VLNZYNH`. Its grant
+composed an exact 1-XLM transfer to one controlled merchant, a two-call lifetime cap, and a newly
+deployed instance of the pinned spending policy with a deliberately short 12-ledger test window.
+
+| Observation | Recorded result |
+| --- | --- |
+| Spending-policy Wasm | Read from the network, not part of the summary. The code entry section 18 restored was still live, until ledger 5590255, both before and after the run. The [policy-instance creation](https://stellar.expert/explorer/testnet/tx/a6967516a4fdd321498516f9ecd993f61b3fb2a8ba55258b3d207d3308681cea) at 5505472 therefore needed no restore: it carried a fee of 1,021,334 stroops against the default 10,000,000-stroop ceiling and was charged 14,908. |
+| Owner recording and artifact chain | The confirmed owner transfer at 5505476 went through the real RPC recorder, synthesis, the 30-case reference suite, generation/build and matching source/Wasm/manifest reproduction. |
+| Install | [The rule 1 installation](https://stellar.expert/explorer/testnet/tx/a6a1cf4ca90d5f67231dee46f556680bb5761392723df34af1c76ca6d165251b) followed the authority commitment check and recheck at ledger 5505479. Both policy configurations matched at 5505481. |
+| Derived denials | The CLI emitted the installed spec's 30-case suite and the replay verified its suite hash. The recorded transfer (`case-0`) was permitted in simulation at 5505482. All 10 live-realizable deny cases were refused at 5505482–5505483 by the predicted enforcer; the live policy order put the spending policy first. The 14 deny cases that stay offline are listed by class and reason, and the 5 other permit cases stay layer-1 only. Nothing was submitted. |
+| Tuple and signer controls | Larger amount (spending policy 3221), split charge and other merchant (generated policy 6), funded other token (account 3002), wrong signer (account 3016) and empty signer set (spending policy 3223), at 5505483–5505484, before charging. |
+| First charge and early repeat | [First charge](https://stellar.expert/explorer/testnet/tx/84817a2ab18b683603da453bdcb17369d2013941b1800631da9859d898e0e828) confirmed at 5505486. The immediate repeat returned spending-policy code 3221 at 5505486, before cutoff 5505498. |
+| Next window and lifetime cap | [Second charge](https://stellar.expert/explorer/testnet/tx/51208efe67ed81962ef0e7c96fd3f444e9c676d1b5b9fab8a066302e64e54eab) confirmed at 5505499. After another full window (target 5505511, reached 5505511), generated-policy code 7 was observed at 5505512. |
+| Owner removal | [Removal transaction](https://stellar.expert/explorer/testnet/tx/b23c676a68f67687d5ffc8419d3992625fc42561c791f52380d3113864715071) confirmed at 5505514. The pinned event matched, the rule read back absent, and both policies reported uninstalled. |
+| Post-removal control | An enforcing simulation returned the account's missing-rule code 3000 at 5505514. |
+
+The derived denials, by enforcer, are the section 11 and 18 cases:
+
+| Cases | Class | Enforcer and code |
+| --- | --- | --- |
+| `case-1` | another contract: the funded control token stands in for the suite's undeployed address | account `UnvalidatedContext` 3002 |
+| `case-5`, `case-8`, `case-10` | stranger recipient; amount − 1; zero amount | generated policy `NoTupleMatched` #6 |
+| `case-7`, `case-9`, `case-11` | amount + 1; amount × 10; i128 maximum | spending policy `SpendingLimitExceeded` 3221 |
+| `case-15` | empty signer set | spending policy `NotAllowed` 3223 |
+| `case-16`, `case-18` | unrecognized signer; delegate plus an unrecognized signer (one account check) | account `UnauthorizedSigner` 3016 |
+
+This W2 report passes under [§7's definition](#what-a-passing-permitdeny-report-is): the original
+was permitted, and ten derived denials were refused by their predicted enforcers. All 12
+subscription control steps completed, and the wrapper finalized with exit 0. The run submitted
+thirteen transactions. Independent read-only checks after the run found all thirteen receipts
+`SUCCESS`, and at ledger 5505520 the owner rule present and rule 1 absent (3000). An offline
+re-export matched the saved summary.
+
+**Limit: the spending-limit Wasm's archival.** The code entry stays live until ledger 5590255,
+about 6 November 2026 at five seconds per ledger. A W2 run after it is archived again pays the
+restore inside the policy-instance creation, which section 18 measured at 9,880,961 stroops
+against the default one-XLM ceiling; the harness never raises a ceiling itself. The reference
+evaluator still does not model the reviewed spending policy's rolling state; the replay predicts
+that policy's refusals from its pinned source and its live, unexercised state. These remain
+editable local RPC observations, with non-atomic reads and no ledger proof or protected
+wallet-approval claim.
+
+## 23. Controlled Soroswap exact-deadline run, 1 November 2026
+
+The [allowlisted run summary](evidence/testnet-soroswap-exact-deadline-2026-11-01.json) records a
+complete [W3 harness execution](WALKTHROUGH-PROTOCOLS.md#w3-soroswap) from 16:40:25 to 16:56:23
+UTC, with exit 0. The checkout was clean at `86854cee322e25ef52db8ad42c7e083cf56a481e`; the CLI
+and the native worker were the section 21 builds, and the CLI's byte digest is retained in the
+provenance. The owner was a throwaway ed25519 key, and both rules were approved in the explicit
+operator mode without a human prompt. The keys were deleted when the run ended. The summary is
+the wrapper's own export.
+
+This repeats section 17 through `soroswap-router@2`, the binding of
+[development registry version 5](TARGET-ADAPTERS.md#current-binding-development-registry-version-5).
+The router rule's input bound is `adapter_derived` from that binding, and its deadline is the
+recorded `u64` timestamp 1793554853 (17:40:53 UTC, the preflight time plus one hour), kept exact.
+The committed operator decisions supplied an output floor of 100,000 units and a transfer cap of
+1,000,000 stroops. Both the deadline controls and the suite's two derived deadline denials
+returned the router-rule policy's code 6.
+
+The selected account was `CCHJKHO2TSFH5LDBREYNMVMCT3EJEZY6XGF6O44RLIP23KBNAJ7HSC54`. Both rules
+were valid until ledger 5505704: the router rule (account rule ID 1) and the transfer rule (ID 2).
+
+| Observation | Recorded result |
+| --- | --- |
+| Owner recording and artifact chain | [Owner swap](https://stellar.expert/explorer/testnet/tx/9a0fb239c172dad0af48cfbeca470f4b628bb3ba68bd55c31f60ec8ef6b57930) of 0.1 XLM confirmed at 5505524 with 167357 output units and a matching balance increase. It went through the real RPC recorder, synthesis, the 65-case reference suite and matching source/Wasm/manifest reproduction for both rules. |
+| Account-Wasm reports | Before installation, the offline `ozpb dry-run` report for each rule permitted its original call and reverted its derived denials in the pinned account and generated policy Wasm: 24 for the router rule (36 cases) and 20 for the transfer rule (29 cases). Synthetic local state and proposed rule IDs; not live observations. |
+| Policy uploads | Read back from the network after the run (not part of the summary): the router-rule policy's upload carried a fee of 12,202,044 stroops and was charged 9,742,036; the transfer-rule policy's carried 11,974,255. Both are well within the 15-XLM upload ceiling. |
+| Install | The [router rule](https://stellar.expert/explorer/testnet/tx/7ba01519b31eb23f1a4162f19aea43d4686f746957acf839f0d363b191d3729b) was checked at 5505531, rechecked at 5505532, installed at 5505533 and read back matched at 5505533. The [transfer rule](https://stellar.expert/explorer/testnet/tx/47afb0b3718448473a035c670f8f31ea3bda6c74afa9a6368ec846f566417c0b) was checked and rechecked at 5505534, installed at 5505536 and read back matched at 5505536. |
+| Derived denials | The CLI emitted the installed spec's 65-case suite and the replay verified its suite hash. Both recorded calls (`case-0`, the swap, and `case-36`, the transfer) were permitted in simulation at 5505537. All twelve live-realizable deny cases were refused at 5505537–5505539 by the predicted enforcer. The 32 deny cases that stay offline are listed by class and reason, and the 19 other permit cases stay layer-1 only. Nothing was submitted. |
+| Deadline controls | The recorded deadline plus one and the largest `u64` deadline each returned the router-rule policy's code 6 at 5505541. Neither was submitted. |
+| Route, recipient and function | Reordered, extended and truncated routes returned the router-rule policy's code 6 at 5505540. The foreign recipient was refused by the recipient's missing authorization at 5505541, with no policy enforcer attributed. The alternate router function returned code 5 at 5505541. |
+| Other controls | A larger input and a lower output floor returned the router-rule policy's code 6 at 5505540; a wrong signer the account's 3016 and an empty signer set the router-rule policy's code 1 at 5505542. A direct transfer to the pair under the transfer rule alone was permitted in simulation at 5505542, as disclosed, and not submitted; one unit above the cap returned the transfer-rule policy's code 6 at 5505542. |
+| Delegated swap and count caps | [Delegated swap](https://stellar.expert/explorer/testnet/tx/8471e2feea4ecf3e355d6bc14b21274dfd1bb7bd89ee3a42a6cf2e7e5263c1f5) confirmed at 5505544 with 167357 output units and a matching balance increase. At 5505544 a repeat swap returned the router-rule policy's code 7, and a direct transfer the transfer-rule policy's code 7. |
+| Expiry | After the wait reached ledger 5505705 (the grants' last valid ledger plus one), the account returned `UnvalidatedContext` (3002) at 5505705. |
+| Owner removal | [Transfer-rule removal](https://stellar.expert/explorer/testnet/tx/6d6ec0ea62c65d3d7ae6ab7ec491e80868256bd846f34f1cda6792124b4e4209) and [router-rule removal](https://stellar.expert/explorer/testnet/tx/e16cd26da8b385f20a56df6aac0978fc80c16b31a473fca8cd8771708a27b933) confirmed at 5505707 and 5505708. Each event matched, each rule read back absent, and each policy reported uninstalled. |
+| Post-removal control | The account's missing-rule code 3000 at 5505708. |
+
+The derived denials are the section 17 cases with the same enforcers: `case-5` and `case-8`
+(input above the cap; output below the floor) and `case-16` and `case-17` (deadline plus one;
+maximum `u64` deadline), all router-rule policy #6; `case-21` (empty signer set, router-rule
+policy #1); `case-41` and `case-45` (stranger recipient; amount above the cap, transfer-rule
+policy #6); `case-50` (empty signer set, transfer-rule policy #1); and `case-22`, `case-24`,
+`case-51` and `case-53` (unrecognized signer; delegate plus an unrecognized signer, for each
+rule; the account's 3016). The same 32 deny cases stay offline as in section 17.
+
+This W3 report passes under [§7's definition](#what-a-passing-permitdeny-report-is): both
+recorded calls were permitted, the delegated swap was confirmed, and twelve derived denials,
+seven for the router rule and five for the transfer rule, were refused by their predicted
+enforcers; as in section 17, they are five distinct checks. All 20 control steps of the
+`adapter_exact_deadline_controls` set completed, and the wrapper finalized with exit 0. The run
+submitted twelve transactions.
+
+Independent read-only checks after the run found all twelve receipts `SUCCESS`, and at ledger
+5505714 the owner rule present, rules 1 and 2 absent (3000) and the account code unchanged. An
+offline re-export matched the saved summary. The adapter binding remains a development-registry
+assertion, not governance, and the router's deployed Wasm was not reproduced from source
+([target adapters](TARGET-ADAPTERS.md#reproduction-attempt)). These remain editable local RPC
+observations, with non-atomic reads and no ledger proof or protected wallet-approval claim.

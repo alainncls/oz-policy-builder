@@ -433,7 +433,7 @@ historical October 15 observations described below. The
 [subscription](../docs/WALKTHROUGH-SEP41.md) and [Soroswap](../docs/WALKTHROUGH-PROTOCOLS.md)
 modes ran them live on 20 October 2026, at the commits recorded in
 [the testnet evidence](../docs/TESTNET-EVIDENCE-TRANCHE-2.md), sections 8 and 9, and most recently,
-with the Blend mode, on 30 October 2026 at `60e1da70` (sections 17–19).
+with the Blend mode, on 1 November 2026 at `86854cee` (sections 21–23).
 
 **Not shown, or not as you might assume:**
 
@@ -546,7 +546,7 @@ bash testnet-harness/run.sh
   `run.json` records the decision under that label, with the exact operator-trusted identities.
 - The refused path ran on testnet once, on 2026-10-15. The accepted path ran that day and
   again in the 20 October W2 and W3 runs (see the testnet evidence, sections 8 and 9) and in
-  the later passing W1, W2 and W3 runs, most recently on 30 October 2026 (sections 17–19). Both
+  the later passing W1, W2 and W3 runs, most recently on 1 November 2026 (sections 21–23). Both
   15 October runs used a passkey owner and an `ozpb` built from the authority-check branch
   before those commands were integrated into this tree.
   One run was accepted: the intent, the
@@ -582,8 +582,8 @@ and what does not.
   Synthesis admits the serialized recording as `self_supplied`. In the default native mode
   this path needs a reviewed new live run before it is evidence at the delivered revision.
   The subscription and Soroswap modes ran it live on 20 October 2026, at earlier commits
-  recorded in the testnet evidence, and with the Blend mode most recently on 30 October 2026
-  at `60e1da70` (sections 17–19).
+  recorded in the testnet evidence, and with the Blend mode most recently on 1 November 2026
+  at `86854cee` (sections 21–23).
 - **simulate.**
   - Runs: every transaction that carries the account's authorization is simulated in enforcing
     mode, with the signed entries, before the transaction is signed. Every denial is observed
