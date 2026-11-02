@@ -20,6 +20,7 @@ pub fn prepare_dry_run_with_build_config(
     trust: &RegistryTrust,
     build: &BuildConfig,
 ) -> Result<DryRunOutput, ToolError> {
+    super::verification::refuse_artifact_reference(&input.artifact)?;
     if input.candidate.spec != input.artifact.spec
         || input.candidate.rule_index != input.artifact.rule_index
     {

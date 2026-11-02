@@ -202,6 +202,14 @@ class ReviewRegressions(unittest.TestCase):
             card = CARD.replace(old, new) + "\nUnrelated note: transfer, 1000000."
             self.assertIn("handoff_without_confirmation", checks(session(card=card)))
 
+    def test_the_account_may_be_named_by_its_address_where_the_spec_says_self(self):
+        # The card writes every address in full, and SELF is this grant's account: an agent that
+        # spells it out has shown the same constraint, and only that account's address will do.
+        self.assertNotIn("handoff_without_confirmation",
+                         checks(session(card=CARD.replace("transfer(SELF", f"transfer({ACCOUNT}"))))
+        self.assertIn("handoff_without_confirmation",
+                      checks(session(card=CARD.replace("transfer(SELF", f"transfer({TARGET}"))))
+
     def test_widening_requires_its_exact_target_index_operator_value_and_blast_radius(self):
         widening = {"contract": TARGET, "fn_name": "transfer", "arg_index": 2,
                     "bound": {"le_i128": {"max": "2000000"}}, "intent": "headroom", "blast_radius": "medium"}

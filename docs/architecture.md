@@ -708,7 +708,7 @@ endpoint; API role + isolated sandbox-worker role, §3).
 
 | Tool | Classification | Purpose |
 |---|---|---|
-| `record_transaction` | network read | tx hash (+ network) → RecordingBundle (`rpc_reported`) |
+| `record_transaction` | network read | tx hash (+ configured source, or URL and network) → RecordingBundle (`rpc_reported`) |
 | `record_simulation` | network read; **confidential input** | unsigned envelope → RecordingBundle (RPC `authMode: record`) |
 | `preflight_transaction` | network read, state-dependent; **confidential input**, and signed entries in it are live authorizations | exact envelope with its intended authorization entries → one RPC `authMode: enforce` simulation: outcome, endpoint-reported ledger, each declared footprint list that is not exactly the simulated one and each disk-read or write limit below the use, and, as advice only, declared instructions or fee below the endpoint's padded estimate. Not a policy, installation, or authority verdict, and never submits; a hosted server refuses envelopes carrying signatures |
 | `capture_target` | network read, state-dependent; **confidential input** | operator-configured `rpc_source` name (never a URL) + unsigned envelope whose only call is a native SAC `transfer(contract account, G recipient, amount)` → the `rpc_reported` target capture (ledger header, state-archival configuration, call, account Wasm hash and footprint entries at one ledger) that the captured-target layer reads. Record mode is acquisition only, never evidence that a policy permits the call; any other target is refused. Never signs, submits or runs the layer |

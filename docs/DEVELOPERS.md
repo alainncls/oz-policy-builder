@@ -385,7 +385,14 @@ signs, or holds keys.
 `OZPB_RPC_SOURCES_JSON` — `{"testnet": {"rpc_url": "https://…",
 "network_passphrase": "Test SDF Network ; September 2015"}}` — and the request names only the
 source; it never carries a URL. `prepare_dry_run` takes the same request and validates its
-source, but reads nothing through it. `scripts/mcp-server-dev.sh` configures exactly one source,
+source, but reads nothing through it. `record_transaction` and `record_simulation` read through
+the same map by default: the source named in `rpc_source`, or the only configured one when the
+request names none. They still accept `rpc_url` with its `network_passphrase` instead, subject
+to `OZPB_RPC_ALLOWLIST` on a hosted server. `verify` and `prepare_dry_run` also accept
+`generated_artifact`, the `build_manifest_hash` of an artifact `generate_code` built earlier in
+the same MCP session, in place of the claimed files, Wasm and manifest; the server substitutes
+them before checking, keeps the last eight per session, and the CLI refuses a reference.
+`scripts/mcp-server-dev.sh` configures exactly one source,
 `testnet` (SDF's public testnet RPC unless `OZPB_DEV_TESTNET_RPC_URL` names another `https://`
 endpoint), and replaces any map already in the environment; it never configures another
 network.

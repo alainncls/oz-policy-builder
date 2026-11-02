@@ -54,10 +54,11 @@ person who needs a scoped policy does not have to know the pipeline exists.
 If all you want is to demonstrate that the server is live and doing real work, this is
 enough — one sentence, no tool names, no file paths:
 
-> Record Stellar testnet transaction `<hash>` for me, using RPC
-> `https://rpc.testnet.stellar.gateway.fm`, and tell me what authorization it required.
+> Record Stellar testnet transaction `<hash>` for me and tell me what authorization it
+> required.
 
-The agent picks `record_transaction`, and you get back the authorization tree, the observed
+The agent picks `record_transaction`, which reads through the server's configured RPC source
+(`testnet` under `scripts/mcp-server-dev.sh`), and you get back the authorization tree, the observed
 code hash of every contract involved, and the evidence trust level. That is the recording
 layer — RFP requirement #1 — answering from a hash you can paste from an explorer.
 
@@ -147,8 +148,9 @@ Because they are what a reviewer will ask:
 
 `evaluate_spec`, `reference_suite`, `synthesize_policy`, and `import_recording` run offline;
 network recording, exact-envelope preflight and target capture read RPC, while generation and
-verification build Wasm. The account and install tools, and `capture_target`, read through an
-RPC source the server was started with (`OZPB_RPC_SOURCES_JSON`); the account and install tools
+verification build Wasm. The account and install tools, `capture_target`, and the recording tools
+unless a request gives its own `rpc_url`, read through an RPC source the server was started with
+(`OZPB_RPC_SOURCES_JSON`); the account and install tools
 may rebuild generated policies, and `prepare_dry_run` builds but reads nothing. Knowing which is
 which saves a confusing failure.
 
@@ -156,14 +158,14 @@ which saves a confusing failure.
 |---|---|
 | `evaluate_spec` | nothing — pure and offline. The one to try first |
 | `import_recording` | nothing, but anything arriving this way is labelled `self_supplied`: a `trust` field in caller JSON is a claim, not a receipt |
-| `record_transaction` | the network, and a transaction hash still inside RPC retention — a few days |
-| `record_simulation` | the network, but no signature and no custody: record mode asks what an *unsigned* envelope would require. This is the path the demo script uses |
+| `record_transaction` | a transaction hash still inside RPC retention — a few days. It reads through the server's configured source (the only one, or `rpc_source`), or through `rpc_url` with its `network_passphrase` |
+| `record_simulation` | the same source, but no signature and no custody: record mode asks what an *unsigned* envelope would require. This is the path the demo script uses |
 | `preflight_transaction` | the network and an exact envelope carrying its intended authorization entries; enforcement mode returns the endpoint-reported simulation outcome and ledger, names each declared footprint list that is not exactly the simulated one and each disk-read or write limit below the use, and lists declared instructions or fee below the endpoint's padded estimate as advice that never changes the outcome. It does not prove that a particular installed policy was selected, and writes are discarded. Discarded writes do not make it harmless: signed authorization entries are live authorizations that anyone who sees the envelope — the RPC endpoint, this transcript — can submit until their `signatureExpirationLedger`, and simulation does not consume their nonce. Use testnet or a short expiration, a trusted endpoint, and the stdio server; a hosted server refuses signed envelopes |
 | `capture_target` | an RPC source the operator configured in `OZPB_RPC_SOURCES_JSON` (the request names it and its network, never a URL; `scripts/mcp-server-dev.sh` configures one, `testnet`), and an unsigned envelope whose only call is a native Stellar Asset Contract `transfer` from the contract account to an existing G recipient. Returns the `rpc_reported` target capture the native worker's captured-target layer reads; its record-mode simulation is acquisition only, not evidence that a policy permits the call. Any other call is refused with `E_UNSUPPORTED_ENVELOPE`; a failed simulation of the call returns `E_TARGET_REFUSED`, archived call state `E_TARGET_ARCHIVED`. The envelope is confidential input: no result or error echoes it, but it reaches the endpoint and this transcript, and the capture repeats its call (account, recipient, amount), so prefer the CLI or a local stdio server. It does not run the captured-target layer |
 | `synthesize_policy` | a recording and the decisions — the signer set, the lifetime, the call cap (or an explicit `unlimited_calls_acknowledged: true` instead of one). Everything else it can work out: the account comes from the recording, and the registry snapshot from what the server was started with (`scripts/mcp-server-dev.sh` supplies the committed development pair). What it will not work out is the decisions, because those are the grant |
 | `reference_suite` | a validated spec; returns layer-1 permit/deny evidence and coverage, not a complete dry run |
 | `generate_code` | the pinned `stellar contract build` installed, and a warm dependency cache. The first call is slow |
-| `verify` | the spec, selected rule, complete generated non-lock files, claimed Wasm and BuildManifest; reports reproduction and evidence limits separately |
+| `verify` | the spec, selected rule, and either the `build_manifest_hash` of an artifact `generate_code` built in this session (as `generated_artifact`) or the complete generated non-lock files, claimed Wasm and BuildManifest; reports reproduction and evidence limits separately. A reference is replaced by the bytes before anything is checked, and only the session that generated the artifact can resolve it |
 | `prepare_dry_run` | the authority-check request below, the artifact `verify` takes, a proposed context-rule ID and a fresh run nonce. It reproduces the artifact and derives the reference suite, then reports the account-Wasm, captured-target and live layers as unavailable: not a complete dry run ([`docs/DRY-RUN-PREPARATION.md`](DRY-RUN-PREPARATION.md)) |
 | `check_policy_call_surface` | the spec and rule index, the exact policy bindings, a signed registry snapshot, the account, the network, and the *name* of a configured RPC source, never a URL. Returns who can change the account or reset the bound policies, with refusals and gaps; advisory, never "safe" |
 | `prepare_install_intent` | the same request. It runs that check itself and returns the exact `add_context_rule` arguments only when nothing is refused or unresolved; it never signs |
