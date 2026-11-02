@@ -10,6 +10,11 @@ it records, synthesizes, builds and verifies policies through operator-allowed t
 sources. User signing and installation approval remain in the wallet. A working local image
 or this guide alone does not establish that the hosted service is running.
 
+For a reference deployment offered during a testnet review, publish its access window and
+shutdown condition alongside its HTTPS address. Keep the self-hostable image and instructions
+available for use after that window. A temporary testnet instance is not evidence of a
+production endpoint or an ongoing availability commitment.
+
 Use the disposable-worker mode below when preparing the hosted testnet deployment. Choosing
 its hosting provider is an operational decision, not a separate milestone requirement.
 Present the actual account, hostname/TLS plan, image digest, client access boundary, cost,
@@ -68,7 +73,7 @@ directory. The directory must contain these files:
 | `bearer-token` | A newly generated 32–128-character URL-safe token; shared only with the trusted clients. |
 | `registry-roots.json` | The registry roots the operator trusts. |
 | `registry.signed.json` | A signed snapshot accepted by those roots and the minimum version. |
-| `rpc-sources.json` | Named sources, such as `{"testnet":{"rpc_url":"https://rpc-testnet.stellar.org","network_passphrase":"Test SDF Network ; September 2015"}}`. |
+| `rpc-sources.json` | Named sources, such as `{"testnet":{"rpc_url":"https://soroban-testnet.stellar.org","network_passphrase":"Test SDF Network ; September 2015"}}`. |
 | `tls.crt`, `tls.key` | A certificate and its private key for `OZPB_HOSTNAME`. Only the proxy receives them. |
 
 Keep the parent directory mode `0700`; make the individual mounted files readable by

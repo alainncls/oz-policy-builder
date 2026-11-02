@@ -1,12 +1,12 @@
 {
   "snapshot": {
     "schema": "registry/v1",
-    "version": 5,
-    "log_index": 5,
+    "version": "5",
+    "log_index": "5",
     "previous_root": "177de9ef770500e7f268c7e2692916c01e8dc031104d456f358d0c0a681548cf",
     "network_id": "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
-    "valid_from_unix": -9223372036854775808,
-    "expires_at_unix": 9223372036854775807,
+    "valid_from_unix": "-9223372036854775808",
+    "expires_at_unix": "9223372036854775807",
     "policies": {
       "4e67aa6ca226d3c16106ff2d95f3b44a8efabc2f2a7655683957e3553ed6a40c": {
         "kind": "oz:spending_limit",
