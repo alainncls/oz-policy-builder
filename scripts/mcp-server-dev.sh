@@ -27,13 +27,22 @@ if [[ ! "$TESTNET_RPC_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9.
         "(host, port, path)" >&2
     exit 2
 fi
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${CLAUDE_PLUGIN_DATA:-$HERE}/target}"
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${CLAUDE_PLUGIN_DATA:-$HERE}/target}"
+# Resolve the caller's target before the build switches to the pinned checkout. The exec
+# below must use exactly the directory Cargo writes, including for a relative override.
+case "$CARGO_TARGET_DIR" in
+    /*) ;;
+    *) CARGO_TARGET_DIR="$PWD/$CARGO_TARGET_DIR" ;;
+esac
+export CARGO_TARGET_DIR
 BIN="$CARGO_TARGET_DIR/release/ozpb-mcp-server"
 if [ -n "${CLAUDE_PLUGIN_DATA:-}" ] || [ ! -x "$BIN" ]; then
     # Cargo refreshes a plugin binary after source updates; the plugin manifest
     # puts its target dir in persistent plugin data. A project checkout with an
-    # existing binary keeps the fast path. Stdout belongs to MCP alone.
-    cargo build --locked --release -p ozpb-mcp-server --manifest-path "$HERE/Cargo.toml" >&2
+    # existing binary keeps the fast path. Stdout belongs to MCP alone. The build runs from
+    # the checkout because rustup reads rust-toolchain.toml from cargo's directory, and a
+    # client starts this wrapper wherever its session is.
+    (cd "$HERE" && cargo build --locked --release -p ozpb-mcp-server >&2)
 fi
 export OZPB_REGISTRY_ROOTS_JSON="$(cat "$HERE/docs/examples/registry-roots.json")"
 export OZPB_REGISTRY_MIN_VERSION="${OZPB_REGISTRY_MIN_VERSION:-4}"
