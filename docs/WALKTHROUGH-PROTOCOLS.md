@@ -27,6 +27,8 @@ A controlled run on 30 October 2026, the first through the v2 binding, completed
 and twelve verified derived denials; the deadline-plus-one and maximum-deadline controls and
 derived cases each returned the router-rule policy's `#6`
 ([section 17](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)).
+A run on 1 November 2026 at revision `86854cee` repeated that result
+([section 23](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026)).
 W1 is executable through `run.sh`: it opens the bounded USDC supply its claim is earned on and
 withdraws it before the keys are discarded (see [W1](#w1-blend)). A controlled run on 21 October
 2026 completed every W1 step after four stopped attempts
@@ -36,6 +38,8 @@ passed ([section 12](TESTNET-EVIDENCE-TRANCHE-2.md#12-controlled-blend-claim-run
 A run on 30 October 2026 repeated every W1 step, including the account-Wasm report below, and
 passed with five derived denials
 ([section 19](TESTNET-EVIDENCE-TRANCHE-2.md#19-controlled-blend-claim-run-30-october-2026)).
+A run on 1 November 2026 at revision `86854cee` passed the same way
+([section 21](TESTNET-EVIDENCE-TRANCHE-2.md#21-controlled-blend-claim-run-1-november-2026)).
 
 ## Offline account-Wasm reports before installation
 
@@ -67,7 +71,8 @@ reported separately. The 20–26 October runs predate this additional gate; they
 its execution evidence. The 30 October W3 and W1 runs passed it before installation
 ([sections 17](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)
 and [19](TESTNET-EVIDENCE-TRANCHE-2.md#19-controlled-blend-claim-run-30-october-2026) of the
-testnet evidence). W2's composed policy is outside this worker's supported scope.
+testnet evidence), and so did the 1 November W1 and W3 runs ([sections 21](TESTNET-EVIDENCE-TRANCHE-2.md#21-controlled-blend-claim-run-1-november-2026)
+and [23](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026)). W2's composed policy is outside this worker's supported scope.
 
 For the offline integration check, set `OZPB_BIN`, `OZPB_NATIVE_WORKER` and `OZPB_ACCOUNT_WASM`
 to trusted binaries and the pinned Wasm, then run
@@ -204,7 +209,8 @@ function, which have no live equivalent here. The historical v1 adapter left the
 those cases expected a permit and were not replayed. Current v2 derives denials for
 deadline-plus-one and the maximum u64 value; the
 [30 October run](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)
-replayed both live, refused by the router-rule policy (`#6`). The
+replayed both live, refused by the router-rule policy (`#6`), and the
+[1 November run](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026) again. The
 section 13 run predates the adapter and replayed the same ten denials against an exact deadline.
 The [section 14 run](TESTNET-EVIDENCE-TRANCHE-2.md#14-controlled-soroswap-adapter-run-26-october-2026)
 uses the adapter-bound 64-case suite and reports the open deadline as a disclosed permission.
@@ -220,6 +226,8 @@ W3 with ten ([section 13](TESTNET-EVIDENCE-TRANCHE-2.md#13-controlled-soroswap-s
 Both passed again on 30 October 2026 at revision `60e1da70`: W3 through the v2 adapter with
 twelve ([section 17](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)),
 W1 again at exactly five ([section 19](TESTNET-EVIDENCE-TRANCHE-2.md#19-controlled-blend-claim-run-30-october-2026)).
+Both passed with the same counts on 1 November 2026 at revision `86854cee`
+([sections 23](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026) and [21](TESTNET-EVIDENCE-TRANCHE-2.md#21-controlled-blend-claim-run-1-november-2026)).
 
 ### Required observations
 

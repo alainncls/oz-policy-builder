@@ -85,7 +85,9 @@ delegate-plus-unrecognized case stop at the same account check, so they count as
 but only one live check. **Status:** the [22 October run](TESTNET-EVIDENCE-TRANCHE-2.md#11-controlled-sep-41-run-with-derived-denials-22-october-2026)
 permitted the original and refused all ten derived denials as predicted, and the
 [30 October run](TESTNET-EVIDENCE-TRANCHE-2.md#18-controlled-sep-41-run-30-october-2026) at
-revision `60e1da70` repeated that result. The 20 October run (§8) predates the step.
+revision `60e1da70` repeated that result, as did the
+[1 November run](TESTNET-EVIDENCE-TRANCHE-2.md#22-controlled-sep-41-run-1-november-2026) at
+revision `86854cee`. The 20 October run (§8) predates the step.
 
 Wrong-tuple and signer controls run before the first charge. Every W2 negative control is an
 enforcing simulation, with no fee-transaction signing or submission even if unexpectedly
