@@ -144,7 +144,9 @@ fn refusal(route: Route, status: u16, body: &[u8]) -> ToolError {
         (Route::Proposal, 422, Some("call_limit")) => proposal_refused(format!(
             "The grant allows more than 512 calls, the most the wallet's execution checks \
              support. Do not reconnect. Ask the user for a cap of at most 512 (a new card and \
-             confirmation follow), or offer {MANUAL}."
+             confirmation follow), or offer section 4's user-run deployment path in {MANUAL}. \
+             A larger cap cannot complete installation through wallet import either; do not \
+             send it back there as a workaround."
         )),
         _ => not_understood(),
     }
@@ -437,6 +439,15 @@ mod tests {
             assert_eq!(error.code, EWalletUnavailable, "{status} {body:?}");
             assert!(!error.to_string().contains(canary));
         }
+    }
+
+    #[test]
+    fn call_limit_manual_fallback_selects_user_run_deployment_not_wallet_import() {
+        let error = refusal(Route::Proposal, 422, &reply("call_limit"));
+        assert_eq!(error.code, EWalletProposalRefused);
+        assert!(error.message.contains("section 4"), "{}", error.message);
+        assert!(error.message.contains("user-run"), "{}", error.message);
+        assert!(error.message.contains("wallet import"), "{}", error.message);
     }
 
     #[test]

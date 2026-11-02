@@ -35,7 +35,7 @@ Use the wallet proposal only when every one of these holds for the confirmed spe
 - it came from `record_transaction` on a confirmed transaction of the user's wallet account,
   on testnet;
 - one rule; one delegated `G…` signer; predicate `any_of` with `strict_signer_set: true`;
-- an expiry ledger and a call cap of 1 to 10,000 calls (the wallet does not take unlimited
+- an expiry ledger and a call cap of 1 to 512 calls (the wallet does not take unlimited
   calls or no expiry);
 - every argument constraint is exact (`eq_*`): no widening, no adapter-derived constraint;
 - the only policy is the generated scope policy (no spending limit);
@@ -50,6 +50,11 @@ by hash while RPC retains it, and requires expiry within 17,280 ledgers of its c
 For execution checks and installation, use the automation delegate created by that wallet
 backend session; an external delegate can be imported for inspection but cannot complete those
 checks. The wallet decides; a refusal is final, not something to work around.
+
+Manual import also accepts caps up to 10,000 for inspection, but caps above 512 cannot complete
+the wallet's execution checks or installation. For a larger cap, use the user-run path in
+section 4; do not send it back to wallet import as an installation workaround. Reducing the cap
+changes the grant and requires synthesis again, a new complete card and a new confirmation.
 
 For anything else, use the user-run path in section 4.
 

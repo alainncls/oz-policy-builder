@@ -369,6 +369,8 @@ When a wallet tool fails, its code says what to do; its message repeats it:
 - `E_WALLET_PROPOSAL_REFUSED`: the wallet refused the content. Do not reconnect. Follow the
   message: build the proposal again from the reference, synthesize again for the connected
   delegate or a cap of at most 512 with the user's agreement, or offer the manual fallback.
+  For a cap above 512, the manual fallback is the install skill's section 4 user-run deployment
+  path. Manual wallet import permits larger caps for inspection only; it cannot install them.
 - `E_WALLET_UNAVAILABLE`: no bridge on this server (always so on hosted MCP), the wallet did
   not answer, or its reply was not understood. After a send that got no answer, retry the
   identical proposal once; then offer the manual fallback.

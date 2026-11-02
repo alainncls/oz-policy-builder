@@ -47,6 +47,9 @@ backend frees them and also ends every connection.
 
 Manual **Import a grant proposal** remains available. The human-invoked install skill is the
 fallback for an unavailable local connection or a grant outside this wallet's supported shape.
+For a cap above 512, use that skill's section 4 user-run deployment path, not manual wallet
+import: larger caps can be imported for inspection but cannot complete execution checks or
+installation. Alternatively agree on a lower cap, synthesize again and confirm the new card.
 For a previously dismissed or expired proposal, reconnect and obtain a fresh complete card
 and confirmation before sending it again; do not modify formatting to bypass a receipt.
 

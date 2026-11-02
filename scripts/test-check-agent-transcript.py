@@ -924,6 +924,18 @@ class RepositoryConfiguration(unittest.TestCase):
         front = self.frontmatter(ROOT / "skills" / "policy-builder-install" / "SKILL.md")
         self.assertRegex(front, r"(?m)^disable-model-invocation:\s*true\s*$")
 
+    def test_install_skill_wallet_path_uses_the_execution_cap(self):
+        # Import permits larger inspection-only grants; the installation chooser must
+        # agree with the worker rather than send a refused grant back to the same limit.
+        limits = (ROOT / "wallet" / "shared" / "execution-limits.mjs").read_text()
+        worker_cap = re.search(r"maxCalls:\s*(\d+)", limits)
+        skill = (ROOT / "skills" / "policy-builder-install" / "SKILL.md").read_text()
+        chooser = skill.split("## 2. Choose the path", 1)[1].split("## 3.", 1)[0]
+        wallet_cap = re.search(r"call cap of 1 to ([\d,]+) calls", chooser)
+        self.assertIsNotNone(worker_cap)
+        self.assertIsNotNone(wallet_cap)
+        self.assertEqual(int(wallet_cap[1].replace(",", "")), int(worker_cap[1]))
+
 
 if __name__ == "__main__":
     unittest.main()
