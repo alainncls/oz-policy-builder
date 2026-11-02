@@ -37,7 +37,7 @@ pub struct Invocation {
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum ArgValue {
     Address(String),
-    I128(i128),
+    I128(#[serde(with = "ozpb_domain::wide_int")] i128),
     /// Any other value: canonical ScVal XDR, base64.
     ScvalXdr(String),
 }

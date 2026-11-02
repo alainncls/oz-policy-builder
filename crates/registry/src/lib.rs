@@ -37,15 +37,19 @@ pub struct RegistrySnapshot {
     /// old name could not be encoded in a canonical preimage at all.
     pub schema: String,
     /// Monotonically increasing snapshot version (rollback/freeze rejection).
+    #[serde(with = "ozpb_domain::wide_int")]
     pub version: u64,
     /// Append-only transparency sequence. A successor must increment this exactly once and
     /// commit to the previously accepted snapshot root.
+    #[serde(with = "ozpb_domain::wide_int")]
     pub log_index: u64,
     pub previous_root: Option<Hash32>,
     pub network_id: NetworkId,
     /// Signed validity interval. Consumers supply their trusted current time to `load_at`;
     /// an expired or not-yet-valid snapshot never becomes a capability oracle.
+    #[serde(with = "ozpb_domain::wide_int")]
     pub valid_from_unix: i64,
+    #[serde(with = "ozpb_domain::wide_int")]
     pub expires_at_unix: i64,
     /// Reviewed policy implementations, keyed by exact wasm hash (hex).
     pub policies: BTreeMap<String, PolicyCapability>,
@@ -77,6 +81,7 @@ pub struct TargetAdapterCapability {
 #[serde(deny_unknown_fields)]
 pub struct Revocation {
     pub reason: String,
+    #[serde(with = "ozpb_domain::wide_int")]
     pub effective_version: u64,
 }
 
@@ -220,7 +225,9 @@ pub struct RootPolicy {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RegistryCheckpoint {
+    #[serde(with = "ozpb_domain::wide_int")]
     pub version: u64,
+    #[serde(with = "ozpb_domain::wide_int")]
     pub log_index: u64,
     pub root: Hash32,
     /// Revocations accepted at this root. The root commits to them, but retaining the set is

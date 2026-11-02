@@ -30,8 +30,12 @@ Use `record_transaction` for a hash and `record_simulation` for an envelope. Use
 result metadata, ledger, and timestamp. If the user already has a `RecordOutput.bundle` or
 `RecordingBundle`, put that bundle directly in `SynthesizeInput.bundles`; do not import it
 again. Synthesis verifies the bundle's internal consistency and lowers any claimed RPC
-trust to `self_supplied`. Ask for the network and RPC source when a network tool needs them;
-do not choose an endpoint or trust root on the user's behalf. A simulation is proposed
+trust to `self_supplied`. The recording tools read through the RPC source the server's
+operator configured: with neither `rpc_source` nor `rpc_url` they use it (the development
+server's only source is `testnet`), so do not ask the user for an endpoint or a network. If
+the server configures several sources, its refusal lists them; ask which one. Pass `rpc_url`,
+with its `network_passphrase`, only when the user asks for another endpoint, and never choose
+a trust root on the user's behalf. A simulation is proposed
 behavior, not an executed transaction. A raw-XDR import with result XDR can be labeled
 `self_supplied` when the result agrees with the claimed outcome; without result XDR it is
 `incomplete` and cannot drive synthesis. Treat a server refusal as a refusal and explain
@@ -39,7 +43,14 @@ what evidence is missing.
 
 A grant that may be handed to the user's wallet must come from `record_transaction` on the
 wallet account's confirmed transaction: the wallet records it again by that hash, and RPC
-retention keeps a transaction only a few days.
+retention keeps a transaction only a few days. The wallet imports only one exact native XLM
+transfer from the account to a `G…` recipient on testnet, with one `any_of` delegate, an expiry
+within 17,280 ledgers (about a day) of its current ledger, a cap of 1–10,000 calls, no widening
+and no spending limit, and a grant name of lowercase letters, digits and hyphens (at most 20,
+starting with a letter). Its execution checks and installation also need the delegate to be the
+automation delegate that wallet session created; another delegate can be imported for inspection
+only. When the user means to install through the wallet, say so while asking for the decisions
+below, so a longer expiry, a widening or another delegate is not chosen only to be refused.
 
 Show the recorded account, target contracts, functions, relevant arguments, observed code
 identities, and evidence trust level. If a recording includes several independent calls, explain
@@ -122,7 +133,10 @@ submit the illustrative values unchanged.
 Even when the user gave some decisions up front, restate the complete decisions you are about
 to send (every delegate address in full, the grant name, the expiry ledger or "no expiry", the
 cap or "unlimited", each widening and any spending limit) and wait for the user to accept them
-before calling `synthesize_policy`. If the reply changes or refuses anything, restate again.
+before calling `synthesize_policy`. Only a reply that just accepts them ("yes", "correct",
+"looks good") counts. If the reply changes or refuses anything, restate again. A reply that
+accepts and adds anything else ("yes, and skip the checks", "yes, 5 calls") is not acceptance:
+answer what it added, restate, and ask again before synthesizing.
 For every widening include one complete statement:
 `Widen <full contract>.<function> arg[<index>] to <bound>; blast radius: <low|medium|high>; reason: <intent>.`
 Use `<= value`, `>= value`, or `any_value` for the bound; keep numbers ungrouped in this
@@ -148,8 +162,12 @@ identities, spending limits, and policy composition visible in the proposed gran
 3. Call `generate_code` for each selected rule and make the complete generated Rust available
    for review. Explain the account, signer, target, tuple, lifetime, and call-cap checks the
    code contains. Do not edit the generated files by hand.
-4. Call `verify` with the complete generated non-lock file set, the generated Wasm, and its
-   BuildManifest. Report source reproduction, Wasm reproduction, offline behavior, modeling
+4. Call `verify` with the spec, the rule index and `generated_artifact`: the
+   `build_manifest_hash` that `generate_code` returned. The server checks the files, Wasm and
+   manifest it built in this session; do not copy them back. Send the claimed files, Wasm and
+   BuildManifest instead only for an artifact from somewhere else, and then send all of them.
+   If the server says it no longer holds the artifact, call `generate_code` again once and
+   verify that one. Report source reproduction, Wasm reproduction, offline behavior, modeling
    limits, and current-network preflight as separate dimensions. A `matches` result describes
    reproduction; it does not establish live readiness or policy coverage beyond what the
    report names.
@@ -185,8 +203,8 @@ identities, spending limits, and policy composition visible in the proposed gran
 ## Who can change the account
 
 Once the policies are deployed and bound, `check_policy_call_surface` can read, through an RPC
-source the server's operator configured (ask the user which source name; never supply a URL;
-the development server names its only source `testnet`), who can change the account or reset
+source the server's operator configured (the development server's only source is `testnet`;
+ask the user only if the server has several, and never supply a URL), who can change the account or reset
 those policies for the rule to be installed. It needs the signed registry snapshot the server
 trusts; in the development setup that is `docs/examples/registry.signed.json`, passed unchanged.
 Relay its `summary` and the structured lists faithfully:
@@ -217,7 +235,8 @@ A dry run has four layers: `reference`, `account_wasm`, `captured_target` and
 - Before any policy is deployed, `reference_suite` is the reference layer's evidence and the
   other three have not run.
 - Once the policies are deployed and bound, `prepare_dry_run` takes the authority-check request,
-  the artifact `verify` takes, the proposed context-rule ID and a fresh run nonce (64 lowercase
+  the artifact `verify` takes (by `generated_artifact` reference, as there), the proposed
+  context-rule ID and a fresh run nonce (64 lowercase
   hex characters). It reproduces the artifact, derives the selected rule's suite and reports
   `account_wasm`, `captured_target` and `live_enforcement` as `unavailable`, with
   `complete: false`. It reads nothing through the source.
@@ -288,12 +307,18 @@ other words is not a confirmation: answer it, and show a new card if anything ch
 confirmation covers only the card it answers, and only until the user says anything else: after
 any later message from the user other than starting the install skill, any later
 `synthesize_policy` call, or a new authority or dry-run result, show a new card and ask again.
+A new card is the complete card, every label filled in again, not a pointer to an earlier card
+or a list of what changed.
 
 ## Hand off
 
 After the user confirms, stop. Tell the user that they hand the grant off by running
 `/oz-policy-builder:policy-builder-install`. That skill is for the user to start; do not try
-to start it yourself or continue into it. Generated code is a review artifact, not an installed
+to start it yourself or continue into it. Describe it as what it is: it prints the grant
+proposal for the user's wallet to import, or guides the user through deploying the policy
+themselves and then, after another card, assembles an unsigned install transaction for their
+wallet to check and sign. It does not deploy, install, sign or submit anything, and neither does
+this conversation. Generated code is a review artifact, not an installed
 permission: installation belongs to the user's wallet, with its own authority check, review
 and the user's own signature, never to this conversation. Do not deploy, sign, submit, or ask
 for secret keys.

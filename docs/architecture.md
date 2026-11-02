@@ -708,7 +708,7 @@ endpoint; API role + isolated sandbox-worker role, §3).
 
 | Tool | Classification | Purpose |
 |---|---|---|
-| `record_transaction` | network read | tx hash (+ network) → RecordingBundle (`rpc_reported`) |
+| `record_transaction` | network read | tx hash (+ configured source, or URL and network) → RecordingBundle (`rpc_reported`) |
 | `record_simulation` | network read; **confidential input** | unsigned envelope → RecordingBundle (RPC `authMode: record`) |
 | `preflight_transaction` | network read, state-dependent; **confidential input**, and signed entries in it are live authorizations | exact envelope with its intended authorization entries → one RPC `authMode: enforce` simulation: outcome, endpoint-reported ledger, each declared footprint list that is not exactly the simulated one and each disk-read or write limit below the use, and, as advice only, declared instructions or fee below the endpoint's padded estimate. Not a policy, installation, or authority verdict, and never submits; a hosted server refuses envelopes carrying signatures |
 | `capture_target` | network read, state-dependent; **confidential input** | operator-configured `rpc_source` name (never a URL) + unsigned envelope whose only call is a native SAC `transfer(contract account, G recipient, amount)` → the `rpc_reported` target capture (ledger header, state-archival configuration, call, account Wasm hash and footprint entries at one ledger) that the captured-target layer reads. Record mode is acquisition only, never evidence that a policy permits the call; any other target is refused. Never signs, submits or runs the layer |
@@ -1243,8 +1243,13 @@ the core consumes: schema and implementation cannot drift. Annotations are set p
 the handler struct is transport-agnostic (`serve(stdio())` and `StreamableHttpService` wrap
 the same handler); hosted auth, rate limits, and quotas are tower layers around the HTTP
 service, never code inside tools. The bound on concurrent builds is the build runner's own,
-because a build outlives the HTTP exchange that started it. Tools hold no per-session state by design, so the bundled
-`LocalSessionManager` suffices and horizontal scaling needs no sticky sessions.
+because a build outlives the HTTP exchange that started it. Each MCP session retains up to eight
+generated artifacts in memory so verification can refer to their manifest hashes instead of
+copying source and Wasm through the client. These references are session-local and disappear
+when the session ends or the server restarts; this is not stateless per-request processing.
+The bundled `LocalSessionManager` owns those sessions, so a session's HTTP requests must reach
+the same backend instance. If a reference is unavailable, regenerate the artifact or provide
+its claimed files, Wasm and manifest. No shared or durable artifact service is supplied.
 
 **Contract specifics.** Templates are ordinary `#![no_std]` contract crates pinned
 to the workspace `soroban-sdk` + `stellar-accounts` versions; storage keys are
