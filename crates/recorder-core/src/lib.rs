@@ -394,16 +394,19 @@ pub struct AuthorizationRecord {
 pub enum CredentialRecord {
     SourceAccount,
     Address {
+        #[serde(with = "ozpb_domain::wide_int")]
         nonce: i64,
         signature_expiration_ledger: u32,
     },
     /// Protocol 27 (CAP-71): address-bound signature payload.
     AddressV2 {
+        #[serde(with = "ozpb_domain::wide_int")]
         nonce: i64,
         signature_expiration_ledger: u32,
     },
     /// Protocol 27 (CAP-71): delegate signature tree (recursively counted).
     AddressWithDelegates {
+        #[serde(with = "ozpb_domain::wide_int")]
         nonce: i64,
         signature_expiration_ledger: u32,
         delegate_count: u32,
@@ -436,8 +439,8 @@ pub enum AuthorizedCall {
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum ArgSummary {
     Address(String),
-    I128(i128),
-    U64(u64),
+    I128(#[serde(with = "ozpb_domain::wide_int")] i128),
+    U64(#[serde(with = "ozpb_domain::wide_int")] u64),
     U32(u32),
     Symbol(String),
     Other { xdr_base64: String },
@@ -452,6 +455,7 @@ pub struct TokenMovement {
     pub to: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spender: Option<String>,
+    #[serde(default, with = "ozpb_domain::wide_int::option")]
     pub amount: Option<i128>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expiration_ledger: Option<u32>,

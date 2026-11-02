@@ -105,6 +105,7 @@ fn request_for_rule(composed: bool, rule_index: usize) -> DryRunInput {
                 .collect(),
             claimed_wasm_base64: Some(generated.wasm_base64),
             claimed_build_manifest: Some(generated.build_manifest),
+            generated_artifact: None,
         },
         candidate_context_rule_id: 7,
         run_nonce: "11".repeat(32),
@@ -177,6 +178,22 @@ fn candidate_and_artifact_must_describe_the_same_rule_and_spec() {
                 .is_err()
         );
     }
+}
+
+/// The run hash must bind the artifact's bytes. A reference is only resolved by the MCP session
+/// that generated it, which replaces it with those bytes before calling this.
+#[test]
+fn an_artifact_reference_cannot_be_bound_into_a_run() {
+    let mut input = request();
+    input.artifact.generated_artifact = Some("ab".repeat(32));
+    let error =
+        prepare_dry_run_with_build_config(&input, &registry_trust(), &build_config()).unwrap_err();
+    assert_eq!(error.code, EC::ESpecInvalid);
+    assert!(
+        error.message.contains("generated_artifact"),
+        "{}",
+        error.message
+    );
 }
 
 #[test]

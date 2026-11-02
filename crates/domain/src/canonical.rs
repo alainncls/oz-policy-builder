@@ -250,6 +250,12 @@ impl ser::Serializer for ScValSerializer {
     type SerializeStruct = StructBuilder;
     type SerializeStructVariant = StructBuilder;
 
+    /// The preimage is typed binary, not text: a field that writes JSON as a decimal string
+    /// (`crate::wide_int`) still encodes here as the integer its schema declares.
+    fn is_human_readable(&self) -> bool {
+        false
+    }
+
     fn serialize_bool(self, v: bool) -> Result<ScVal, DomainError> {
         Ok(ScVal::Bool(v))
     }
