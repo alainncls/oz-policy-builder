@@ -68,7 +68,7 @@ directory. The directory must contain these files:
 | `bearer-token` | A newly generated 32–128-character URL-safe token; shared only with the trusted clients. |
 | `registry-roots.json` | The registry roots the operator trusts. |
 | `registry.signed.json` | A signed snapshot accepted by those roots and the minimum version. |
-| `rpc-sources.json` | Named sources, such as `{"testnet":{"rpc_url":"https://rpc-testnet.stellar.org","network_passphrase":"Test SDF Network ; September 2015"}}`. |
+| `rpc-sources.json` | Named sources, such as `{"testnet":{"rpc_url":"https://soroban-testnet.stellar.org","network_passphrase":"Test SDF Network ; September 2015"}}`. |
 | `tls.crt`, `tls.key` | A certificate and its private key for `OZPB_HOSTNAME`. Only the proxy receives them. |
 
 Keep the parent directory mode `0700`; make the individual mounted files readable by

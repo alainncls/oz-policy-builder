@@ -18,6 +18,17 @@ cargo build -r -p ozpb-mcp-server
 
 For the guided flow, run `claude --plugin-dir .` from this checkout and invoke
 `/oz-policy-builder:policy-builder`. The plugin bundles the skill and an MCP server entry.
+The plugin builds its own copy of the server, in Claude's plugin data directory rather than
+`target/`, so the build above does not cover it. From cold that build takes minutes; Claude
+Code stops waiting for a server to start after about 30 seconds and then holds the failure for
+a while before retrying. Start the first plugin session with a longer startup timeout
+([`MCP_TIMEOUT`](https://code.claude.com/docs/en/mcp), in milliseconds) and let it finish:
+
+```bash
+MCP_TIMEOUT=900000 claude --plugin-dir .
+```
+
+Later sessions rebuild only what changed.
 For direct tool use, the repository's `.mcp.json` also points at
 `scripts/mcp-server-dev.sh`. The wrapper refreshes plugin builds in Claude's persistent
 plugin data directory and starts the server with development registry trust configured;
@@ -63,9 +74,18 @@ layer — RFP requirement #1 — answering from a hash you can paste from an exp
 
 The hash has to be recent: RPC retention drops transactions after a few days, and an expired
 one comes back as `E_RETENTION_EXPIRED` rather than a guess. If you have no hash to hand, run
-`bash scripts/demo-tranche1.sh` and use the account it prints, or ask for the *simulated*
-path instead — "what would a transfer of 1 XLM from `C…` to `G…` require?" — which needs no
-hash and no signature.
+`bash scripts/demo-tranche1.sh` and use the account it prints, or take the *simulated* path,
+which needs no hash and no signature but does need an unsigned envelope: no tool builds one in
+conversation. The Stellar CLI prints one without signing or submitting it, from any funded
+testnet identity as the fee source:
+
+```bash
+stellar contract invoke --id <token contract C…> --source <identity> --network testnet \
+    --build-only -- transfer --from <smart account C…> --to <recipient G…> --amount 10000000
+```
+
+Then ask "what authorization would this envelope require?" and paste the XDR it printed; the
+agent picks `record_simulation`.
 
 **Going further than one command is better done with the skill.** The flow needs decisions
 only you can make — how long the grant lives, a call cap, a spend limit, which signer.

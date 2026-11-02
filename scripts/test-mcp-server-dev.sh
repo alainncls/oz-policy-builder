@@ -53,7 +53,22 @@ for bad in 'http://rpc.example.test' \
     fi
 done
 
+# A plugin session starts the wrapper from the user's directory, and rustup picks the toolchain
+# from the directory cargo runs in: the build has to run from this checkout, or the pin in
+# rust-toolchain.toml is ignored and a cold build compiles everything with another compiler.
+mkdir -p "$WORK/bin" "$WORK/elsewhere"
+cat > "$WORK/bin/cargo" <<EOF
+#!/usr/bin/env bash
+pwd -P > "$WORK/cargo-cwd"
+EOF
+chmod +x "$WORK/bin/cargo"
+(cd "$WORK/elsewhere" && run CLAUDE_PLUGIN_DATA="$WORK/plugin-data" PATH="$WORK/bin:$PATH" >/dev/null)
+if [ "$(cat "$WORK/cargo-cwd" 2>/dev/null)" != "$(pwd -P)" ]; then
+    echo "FAIL: the plugin build ran in '$(cat "$WORK/cargo-cwd" 2>/dev/null)', not this checkout" >&2
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
-echo "mcp-server-dev.sh: testnet-only RPC source OK"
+echo "mcp-server-dev.sh: testnet-only RPC source and pinned-toolchain build OK"

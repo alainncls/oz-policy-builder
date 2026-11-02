@@ -32,8 +32,10 @@ BIN="$CARGO_TARGET_DIR/release/ozpb-mcp-server"
 if [ -n "${CLAUDE_PLUGIN_DATA:-}" ] || [ ! -x "$BIN" ]; then
     # Cargo refreshes a plugin binary after source updates; the plugin manifest
     # puts its target dir in persistent plugin data. A project checkout with an
-    # existing binary keeps the fast path. Stdout belongs to MCP alone.
-    cargo build --locked --release -p ozpb-mcp-server --manifest-path "$HERE/Cargo.toml" >&2
+    # existing binary keeps the fast path. Stdout belongs to MCP alone. The build runs from
+    # the checkout because rustup reads rust-toolchain.toml from cargo's directory, and a
+    # client starts this wrapper wherever its session is.
+    (cd "$HERE" && cargo build --locked --release -p ozpb-mcp-server >&2)
 fi
 export OZPB_REGISTRY_ROOTS_JSON="$(cat "$HERE/docs/examples/registry-roots.json")"
 export OZPB_REGISTRY_MIN_VERSION="${OZPB_REGISTRY_MIN_VERSION:-4}"
