@@ -1150,8 +1150,8 @@ a registry**; defined offline behavior (pinned snapshot with staleness warnings)
 equivocation resistance via an append-only transparency log; and defined revocation effects —
 **revoking a registry entry cannot disable an on-chain grant by itself**; it fails future
 verification, raises a wallet alert on affected installs, and activates the documented
-emergency-removal path. Registry stewardship (new reviewed hashes, revocations) is part of
-the maintenance plan and the OZ coordination loop (§11).
+emergency-removal path. Registry stewardship (new reviewed hashes, revocations) is covered
+for the grant period only (Maintenance, §10) and through the OZ coordination loop (§11).
 
 ### 4.11 Engineering architecture — workspace, boundaries, and idioms
 
@@ -1665,12 +1665,11 @@ audit report + remediation log.
   passes in CI.
 - Security review covers the full authorization-to-install path.
 
-**Post-launch maintenance:** protocol-upgrade tracking (recorder XDR + SDK bumps), OZ release
-tracking with a compatibility matrix, capability-registry stewardship (new reviewed hashes,
-verifier entries, revocations, transparency-log operation), template/adapter additions via
-the upstreaming loop, dependency and vulnerability monitoring, security contact + disclosure
-policy, and regular public progress updates for the duration of the engagement and beyond it
-as the toolkit's stewards.
+**Maintenance:** during the grant, through Tranche 3, the team keeps the toolkit current with
+protocol, SDK and OpenZeppelin releases, maintains the development registry, fixes reported
+vulnerabilities, and posts regular public progress updates. After Tranche 3 there is no
+committed maintenance, support or hosting: the toolkit stays open source (Apache-2.0 OR MIT)
+for anyone to run, fork or maintain, and Gateway operates no service for it.
 
 ---
 
