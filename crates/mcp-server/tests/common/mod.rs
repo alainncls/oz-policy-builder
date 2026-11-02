@@ -55,6 +55,8 @@ pub fn run_session_with_env(
 ) -> Vec<serde_json::Value> {
     let bin = env!("CARGO_BIN_EXE_ozpb-mcp-server");
     let mut command = Command::new(bin);
+    // A test states the operator configuration it needs; an exported one must not leak in.
+    command.env_remove("OZPB_RPC_SOURCES_JSON");
     for (key, value) in env {
         command.env(key, value);
     }

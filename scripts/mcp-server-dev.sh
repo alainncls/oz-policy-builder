@@ -13,7 +13,8 @@
 #
 # It also configures one RPC source, named `testnet`, for the tools that read through an operator
 # source rather than a URL in the request (`check_policy_call_surface`, `prepare_install_intent`,
-# `assemble_install_transaction`, `check_against_policy`, `capture_target`; `prepare_dry_run`
+# `assemble_install_transaction`, `check_against_policy`, `capture_target`, and
+# `record_transaction`/`record_simulation` unless a request gives its own URL; `prepare_dry_run`
 # validates it without reading). Testnet only: the passphrase is fixed here and any
 # `OZPB_RPC_SOURCES_JSON` already in the environment is replaced. The endpoint defaults to SDF's
 # public testnet RPC; `OZPB_DEV_TESTNET_RPC_URL` may name another plain `https://` endpoint for

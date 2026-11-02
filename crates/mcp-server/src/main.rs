@@ -79,6 +79,32 @@ impl RpcEndpointPolicy {
     }
 }
 
+/// How many artifacts one session remembers for `generated_artifact` references.
+const KEPT_ARTIFACTS: usize = 8;
+
+/// What `generate_code` built in this session, so `verify` and `prepare_dry_run` can name an
+/// artifact by its `build_manifest_hash` instead of carrying a crate and its Wasm — tens of
+/// thousands of characters — back through the conversation. The oldest is forgotten first.
+#[derive(Default)]
+struct GeneratedArtifacts(std::collections::VecDeque<GenerateCodeOutput>);
+
+impl GeneratedArtifacts {
+    fn keep(&mut self, artifact: GenerateCodeOutput) {
+        self.0
+            .retain(|kept| kept.build_manifest_hash != artifact.build_manifest_hash);
+        if self.0.len() == KEPT_ARTIFACTS {
+            self.0.pop_front();
+        }
+        self.0.push_back(artifact);
+    }
+
+    fn find(&self, build_manifest_hash: &str) -> Option<&GenerateCodeOutput> {
+        self.0
+            .iter()
+            .find(|kept| kept.build_manifest_hash == build_manifest_hash)
+    }
+}
+
 #[derive(Clone)]
 struct PolicyBuilderServer {
     tool_router: ToolRouter<Self>,
@@ -97,6 +123,9 @@ struct PolicyBuilderServer {
     /// arbitrary execution.
     build_config: ozpb_toolkit::BuildConfig,
     tool_quotas: Option<tool_limits::ToolQuotas>,
+    /// This session's generated artifacts. Per session on a hosted server too: one client
+    /// cannot name another's.
+    generated: Arc<std::sync::Mutex<GeneratedArtifacts>>,
 }
 
 impl PolicyBuilderServer {
@@ -121,6 +150,7 @@ impl PolicyBuilderServer {
             rpc_sources,
             build_config,
             tool_quotas: None,
+            generated: Default::default(),
         }
     }
 
@@ -129,6 +159,126 @@ impl PolicyBuilderServer {
             Some(policy) => policy.authorize(requested),
             None => Ok(requested.to_string()),
         }
+    }
+
+    /// Replace a `generated_artifact` reference with the files, Wasm and BuildManifest this
+    /// session's `generate_code` built, so everything downstream — reproduction, the dry-run
+    /// hash — sees exactly the request a client sending the bytes would have made.
+    fn resolve_generated_artifact(
+        &self,
+        input: &mut ozpb_api_types::VerifyInput,
+    ) -> Result<(), ToolError> {
+        let Some(reference) = input.generated_artifact.take() else {
+            return Ok(());
+        };
+        let refuse =
+            |message: String| ToolError::new(ozpb_api_types::ErrorCode::ESpecInvalid, message);
+        if !input.claimed_generated_files.is_empty()
+            || input.claimed_wasm_base64.is_some()
+            || input.claimed_build_manifest.is_some()
+        {
+            return Err(refuse(
+                "give generated_artifact or the claimed files, Wasm and BuildManifest, not both"
+                    .to_string(),
+            ));
+        }
+        if reference.len() != 64
+            || !reference
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(refuse(
+                "generated_artifact is the build_manifest_hash generate_code returned".to_string(),
+            ));
+        }
+        // Nothing panics while the lock is held, so a poisoned store is still consistent.
+        let kept = self
+            .generated
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let artifact = kept.find(&reference).ok_or_else(|| {
+            refuse(format!(
+                "no artifact with build_manifest_hash {reference} was generated in this session \
+                 (it keeps the last {KEPT_ARTIFACTS}); call generate_code again, or send the \
+                 claimed files, Wasm and BuildManifest"
+            ))
+        })?;
+        input.claimed_generated_files = artifact
+            .files
+            .iter()
+            .filter(|(path, _)| path.as_str() != "Cargo.lock")
+            .map(|(path, contents)| (path.clone(), contents.clone()))
+            .collect();
+        input.claimed_wasm_base64 = Some(artifact.wasm_base64.clone());
+        input.claimed_build_manifest = Some(artifact.build_manifest.clone());
+        Ok(())
+    }
+
+    /// Where a recording tool reads, and for which network: a configured source by name, the
+    /// only configured source when nothing is named, or a caller URL with its passphrase. An
+    /// agent should never have to ask its user for an endpoint the operator already chose.
+    fn record_endpoint(
+        &self,
+        rpc_source: Option<&str>,
+        rpc_url: Option<&str>,
+        network_passphrase: Option<&str>,
+    ) -> Result<(String, String), ToolError> {
+        let refuse = |message: String| ToolError::new(ozpb_api_types::ErrorCode::ERpc, message);
+        let source = match (rpc_source, rpc_url) {
+            (Some(_), Some(_)) => {
+                return Err(refuse(
+                    "name a configured rpc_source or give an rpc_url, not both".to_string(),
+                ))
+            }
+            (None, Some(url)) => {
+                let passphrase = network_passphrase.ok_or_else(|| {
+                    refuse("an rpc_url needs the network_passphrase it serves".to_string())
+                })?;
+                return Ok((self.authorized_rpc_url(url)?, passphrase.to_string()));
+            }
+            // Like the other source-reading tools, an unknown name does not list the
+            // operator's names to a client that guessed one.
+            (Some(name), None) => self.rpc_sources.get(name).ok_or_else(|| {
+                refuse(format!(
+                    "no RPC source named {name:?} is configured on this server"
+                ))
+            })?,
+            (None, None) => {
+                let mut sources = self.rpc_sources.values();
+                match (sources.next(), sources.next()) {
+                    (Some(only), None) => only,
+                    (None, _) => {
+                        return Err(refuse(
+                            "this server has no configured RPC source; give an rpc_url and \
+                             its network_passphrase"
+                                .to_string(),
+                        ))
+                    }
+                    (Some(_), Some(_)) => {
+                        let names: Vec<_> = self
+                            .rpc_sources
+                            .keys()
+                            .map(|name| format!("{name:?}"))
+                            .collect();
+                        return Err(refuse(format!(
+                            "this server configures several RPC sources; name one as \
+                             rpc_source: [{}]",
+                            names.join(", ")
+                        )));
+                    }
+                }
+            }
+        };
+        if network_passphrase.is_some_and(|stated| stated != source.network_passphrase) {
+            return Err(ToolError::new(
+                ozpb_api_types::ErrorCode::ENetworkMismatch,
+                "the RPC source serves another network than the stated network_passphrase",
+            ));
+        }
+        Ok((
+            self.authorized_rpc_url(&source.rpc_url)?,
+            source.network_passphrase.clone(),
+        ))
     }
 }
 
@@ -151,7 +301,11 @@ fn http_session_factory(
             .map(|tool| tool.name.into_owned()),
         limits,
     )?);
-    Ok(move || Ok(server.clone()))
+    Ok(move || {
+        let mut session = server.clone();
+        session.generated = Default::default();
+        Ok(session)
+    })
 }
 
 /// Map a toolkit ToolError into an rmcp tool-execution error carrying the structured
@@ -198,23 +352,27 @@ impl PolicyBuilderServer {
         name = "record_transaction",
         description = "Record an executed Stellar transaction (by hash, via Stellar RPC) \
                        into a RecordingBundle: the authorization tree, token movements, \
-                       and dual hashes. Network read."
+                       and dual hashes. Network read. Reads through the server's configured \
+                       RPC source when there is one; do not ask the user for an endpoint."
     )]
     async fn record_transaction(
         &self,
         Parameters(input): Parameters<RecordTransactionInput>,
         ct: CancellationToken,
     ) -> Result<Json<RecordOutput>, CallToolResult> {
-        let rpc_url = self.authorized_rpc_url(&input.rpc_url).map_err(tool_err)?;
+        let (rpc_url, network_passphrase) = self
+            .record_endpoint(
+                input.rpc_source.as_deref(),
+                input.rpc_url.as_deref(),
+                input.network_passphrase.as_deref(),
+            )
+            .map_err(tool_err)?;
         let request = ct.clone();
         let out = tokio::task::spawn_blocking(move || {
             let transport = cancel::transport(rpc_url, &request);
-            let snapshot = ozpb_source_rpc::get_transaction(
-                &transport,
-                &input.network_passphrase,
-                &input.tx_hash,
-            )
-            .map_err(rpc_tool_err)?;
+            let snapshot =
+                ozpb_source_rpc::get_transaction(&transport, &network_passphrase, &input.tx_hash)
+                    .map_err(rpc_tool_err)?;
             let options = RecordOptions {
                 operation_index: input.operation_index,
                 allow_failed: input.allow_failed,
@@ -232,21 +390,28 @@ impl PolicyBuilderServer {
     #[tool(
         name = "record_simulation",
         description = "Record an unsigned transaction envelope via simulateTransaction in \
-                       record mode into a RecordingBundle. Network read; the envelope is \
-                       confidential input."
+                       record mode into a RecordingBundle. Network read through the server's \
+                       configured RPC source when there is one; the envelope is confidential \
+                       input."
     )]
     async fn record_simulation(
         &self,
         Parameters(input): Parameters<RecordSimulationInput>,
         ct: CancellationToken,
     ) -> Result<Json<RecordOutput>, CallToolResult> {
-        let rpc_url = self.authorized_rpc_url(&input.rpc_url).map_err(tool_err)?;
+        let (rpc_url, network_passphrase) = self
+            .record_endpoint(
+                input.rpc_source.as_deref(),
+                input.rpc_url.as_deref(),
+                input.network_passphrase.as_deref(),
+            )
+            .map_err(tool_err)?;
         let request = ct.clone();
         let out = tokio::task::spawn_blocking(move || {
             let transport = cancel::transport(rpc_url, &request);
             let snapshot = ozpb_source_rpc::simulate_transaction(
                 &transport,
-                &input.network_passphrase,
+                &network_passphrase,
                 &input.envelope_xdr_base64,
             )
             .map_err(rpc_tool_err)?;
@@ -317,6 +482,10 @@ impl PolicyBuilderServer {
         .await
         .map_err(internal_tool_err)?;
         let out = cancel::unless_cancelled(&ct, out.map_err(tool_err))?;
+        self.generated
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .keep(out.clone());
         Ok(Json(out))
     }
 
@@ -522,6 +691,107 @@ pub(crate) mod tests {
             .as_str()
             .unwrap_or_default()
             .to_string()
+    }
+
+    fn artifact(hash: &str) -> GenerateCodeOutput {
+        GenerateCodeOutput {
+            crate_name: "policy".into(),
+            files: std::collections::BTreeMap::from([
+                ("Cargo.lock".into(), "lock".into()),
+                ("src/lib.rs".into(), "source".into()),
+            ]),
+            normalized_input_hash: "11".repeat(32),
+            soroban_sdk_version: "sdk".into(),
+            stellar_accounts_version: "accounts".into(),
+            wasm_base64: "AGFzbQ==".into(),
+            wasm_hash: "22".repeat(32),
+            build_manifest: serde_json::json!({"manifest": hash}),
+            build_manifest_hash: hash.into(),
+        }
+    }
+
+    fn reference(hash: &str) -> ozpb_api_types::VerifyInput {
+        ozpb_api_types::VerifyInput {
+            spec: subscription_spec(),
+            rule_index: 0,
+            claimed_generated_files: Default::default(),
+            claimed_wasm_base64: None,
+            claimed_build_manifest: None,
+            generated_artifact: Some(hash.into()),
+        }
+    }
+
+    /// The reference becomes exactly the claim a client would have sent: every file but the
+    /// lockfile, the Wasm and the manifest, with the reference itself gone.
+    #[test]
+    fn a_generated_artifact_reference_becomes_its_files_wasm_and_manifest() {
+        let server = hosted();
+        let hash = "ab".repeat(32);
+        server.generated.lock().unwrap().keep(artifact(&hash));
+        let mut input = reference(&hash);
+        server.resolve_generated_artifact(&mut input).unwrap();
+        assert_eq!(input.generated_artifact, None);
+        assert_eq!(
+            input.claimed_generated_files,
+            std::collections::BTreeMap::from([("src/lib.rs".into(), "source".into())])
+        );
+        assert_eq!(input.claimed_wasm_base64.as_deref(), Some("AGFzbQ=="));
+        assert_eq!(
+            input.claimed_build_manifest,
+            Some(serde_json::json!({"manifest": hash}))
+        );
+    }
+
+    #[test]
+    fn an_unknown_mixed_or_malformed_reference_is_refused() {
+        let server = hosted();
+        let kept = "ab".repeat(32);
+        server.generated.lock().unwrap().keep(artifact(&kept));
+        let mut mixed = reference(&kept);
+        mixed.claimed_wasm_base64 = Some("AGFzbQ==".into());
+        for (mut input, says) in [
+            (reference(&"cd".repeat(32)), "generate_code again"),
+            (mixed, "not both"),
+            (reference("not-a-hash"), "build_manifest_hash"),
+        ] {
+            let error = server.resolve_generated_artifact(&mut input).unwrap_err();
+            assert!(error.message.contains(says), "{}", error.message);
+        }
+    }
+
+    /// Bounded: the oldest artifact is forgotten first, and regenerating one keeps one copy.
+    #[test]
+    fn the_session_keeps_only_its_latest_artifacts() {
+        let mut kept = GeneratedArtifacts::default();
+        for i in 0..=KEPT_ARTIFACTS {
+            kept.keep(artifact(&format!("{i:064x}")));
+        }
+        kept.keep(artifact(&format!("{:064x}", KEPT_ARTIFACTS)));
+        assert_eq!(kept.0.len(), KEPT_ARTIFACTS);
+        assert!(kept.find(&format!("{:064x}", 0)).is_none());
+        assert!(kept.find(&format!("{:064x}", 1)).is_some());
+    }
+
+    /// A hosted server serves many clients; one session cannot name another's artifact.
+    #[test]
+    fn hosted_sessions_do_not_share_generated_artifacts() {
+        let sessions = http_session_factory(
+            None,
+            RpcEndpointPolicy::from_csv("https://rpc.allowed.example").unwrap(),
+            Default::default(),
+            hosted().build_config,
+            tool_limits::ToolLimitConfig::parse(60, None).unwrap(),
+        )
+        .unwrap();
+        let (first, second) = (sessions().unwrap(), sessions().unwrap());
+        let hash = "ab".repeat(32);
+        first.generated.lock().unwrap().keep(artifact(&hash));
+        assert!(second
+            .resolve_generated_artifact(&mut reference(&hash))
+            .is_err());
+        assert!(first
+            .resolve_generated_artifact(&mut reference(&hash))
+            .is_ok());
     }
 
     #[tokio::test]

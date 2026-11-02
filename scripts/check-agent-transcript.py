@@ -267,13 +267,16 @@ def label_line(text, label):
     return match.group(1) if match else None
 
 
-def constraint_pattern(constraint):
+def constraint_pattern(constraint, account=None):
     """A small explicit display grammar; unknown prose cannot verify a constraint."""
     if constraint == "any_value":
         return r"(?:any_value|any value|unconstrained)"
     if not isinstance(constraint, dict) or len(constraint) != 1:
         raise ValueError("unreadable constraint")
     kind, fields = next(iter(constraint.items()))
+    if kind == "eq_address" and fields["value"] == "SELF" and account:
+        # The card writes addresses in full; SELF is this grant's account, by either name.
+        return r"(?:SELF|" + re.escape(account) + r")"
     if kind in ("eq_address", "eq_i128"):
         return re.escape(str(fields["value"]))
     if kind == "eq_scval":
@@ -295,7 +298,9 @@ def permitted_calls_match(text, spec):
     end = re.search(r"(?im)^[\s>*_#|-]*(?:" + "|".join(map(re.escape, CARD_LABELS))
                     + r")[\s*_]*:", rest)
     block = rest[:end.start()] if end else rest
-    displayed = re.findall(r"\b([A-Za-z_][\w]*)\(([^()]*)\)\s+on\s+([CG][A-Z2-7]+)", block)
+    # The call and its target may each be set as inline code or emphasis.
+    displayed = re.findall(
+        r"\b([A-Za-z_][\w]*)\(([^()]*)\)[`*_]*\s+on\s+[`*_]*([CG][A-Z2-7]+)", block)
     expected = [(rule["context"]["contract"], call) for rule in spec["rules"]
                 for call in rule["allowed_calls"]]
     if len(displayed) != len(expected):
@@ -305,7 +310,8 @@ def permitted_calls_match(text, spec):
         args = sorted(call["args"], key=lambda arg: arg["i"])
         if [a["i"] for a in args] != list(range(len(args))):
             return False
-        pattern = r"\s*,\s*".join(constraint_pattern(a["c"]) for a in args)
+        pattern = r"\s*,\s*".join(constraint_pattern(a["c"], spec["smart_account"]["address"])
+                                   for a in args)
         matched = next((i for i, (fn, values, contract) in enumerate(remaining)
                         if fn == call["fn"] and contract == target
                         and re.fullmatch(r"\s*" + pattern + r"\s*", values)), None)
