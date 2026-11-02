@@ -175,6 +175,7 @@ pub struct VerifyInput {
     ///
     /// The implementation must compare the complete key set as well as contents. A missing
     /// manifest/toolchain file or an extra source module is a mismatch, not reproduction.
+    #[serde(default)]
     pub claimed_generated_files: std::collections::BTreeMap<String, String>,
     /// Built artifact to reproduce. Omission is reported as not verified, never success.
     #[serde(default)]
@@ -182,6 +183,13 @@ pub struct VerifyInput {
     /// BuildManifest supplied with the artifact. Omission is reported separately.
     #[serde(default)]
     pub claimed_build_manifest: Option<serde_json::Value>,
+    /// Instead of the three claimed fields: the `build_manifest_hash` that `generate_code`
+    /// returned earlier in the same MCP session. That server substitutes the files, Wasm and
+    /// manifest it built before anything is checked or hashed, so the request is evaluated
+    /// exactly as if they had been sent — without copying a crate and its Wasm through the
+    /// conversation. Every other entry point refuses it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generated_artifact: Option<String>,
 }
 
 /// Each dimension is reported separately — never collapsed into one "pure" boolean
@@ -865,6 +873,46 @@ pub enum InstallPolicyParams {
 mod tests {
     use super::*;
     use crate::test_support::no_build_settings_on_the_wire;
+
+    /// A dry-run run hash covers its `VerifyInput`. With no reference — which is all the toolkit
+    /// ever receives — the field is absent from JSON and from the canonical preimage, so the
+    /// request hashes exactly as it did before the field existed.
+    #[test]
+    fn an_absent_artifact_reference_leaves_the_hashed_request_unchanged() {
+        #[derive(Serialize)]
+        struct Before {
+            spec: serde_json::Value,
+            rule_index: usize,
+            claimed_generated_files: std::collections::BTreeMap<String, String>,
+            claimed_wasm_base64: Option<String>,
+            claimed_build_manifest: Option<serde_json::Value>,
+        }
+        let files = std::collections::BTreeMap::from([("src/lib.rs".into(), "x".into())]);
+        let now = VerifyInput {
+            spec: serde_json::json!({"schema": "policy-spec/v1"}),
+            rule_index: 0,
+            claimed_generated_files: files.clone(),
+            claimed_wasm_base64: Some("AGFzbQ==".into()),
+            claimed_build_manifest: Some(serde_json::json!({"m": 1})),
+            generated_artifact: None,
+        };
+        let before = Before {
+            spec: now.spec.clone(),
+            rule_index: 0,
+            claimed_generated_files: files,
+            claimed_wasm_base64: now.claimed_wasm_base64.clone(),
+            claimed_build_manifest: now.claimed_build_manifest.clone(),
+        };
+        assert_eq!(
+            serde_json::to_value(&now).unwrap(),
+            serde_json::to_value(&before).unwrap()
+        );
+        let domain = ozpb_domain::domains::DRY_RUN_REQUEST;
+        assert_eq!(
+            ozpb_domain::canonical_preimage_bytes(domain, &now).unwrap(),
+            ozpb_domain::canonical_preimage_bytes(domain, &before).unwrap()
+        );
+    }
 
     #[test]
     fn the_wire_contract_carries_no_build_configuration() {

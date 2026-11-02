@@ -17,6 +17,21 @@ function fixture() {
     delegate: f.synthesis.spec.rules[0].authorization.signers[0].delegated.address, walkthrough: f.plan };
   return f;
 }
+// The CLI writes 64- and 128-bit integers as decimal strings (a JavaScript client would round them
+// as numbers); the preserved capture predates that and carries numbers. Both are one observation.
+function withDecimalStrings(value, key) {
+  if (Array.isArray(value)) return value.map((item) => withDecimalStrings(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, withDecimalStrings(v, k)]));
+  }
+  return ['i128', 'u64', 'nonce'].includes(key) && Number.isInteger(value) ? String(value) : value;
+}
+test('a recording with decimal-string integers, as the CLI writes it, is the same observation', () => {
+  const numeric = fixture(), strings = fixture();
+  strings.record = withDecimalStrings(strings.record);
+  assert.notDeepEqual(strings.record, numeric.record);
+  assert.deepEqual(protocolInputs(strings.run, strings.record), protocolInputs(numeric.run, numeric.record));
+});
 for (const horizon of [180, 0, 1001, 1.5]) {
   test(`protocol grant horizon is explicit and bounded: ${horizon}`, () => {
     const f = fixture();

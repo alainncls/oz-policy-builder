@@ -35,9 +35,11 @@ impl PolicyBuilderServer {
     )]
     async fn prepare_dry_run(
         &self,
-        Parameters(input): Parameters<DryRunInput>,
+        Parameters(mut input): Parameters<DryRunInput>,
         ct: CancellationToken,
     ) -> Result<Json<DryRunOutput>, CallToolResult> {
+        self.resolve_generated_artifact(&mut input.artifact)
+            .map_err(tool_err)?;
         // Reserve shared work capacity and validate the operator's RPC source
         // before building, even though this preparation does not read that source.
         // Binding recognition reproduces each generated rule. Artifact verification
@@ -85,14 +87,18 @@ impl PolicyBuilderServer {
     #[tool(
         name = "verify",
         description = "Verify generated non-lock files, Wasm and BuildManifest against a \
-                       PolicySpec rule, and report offline behavior separately. \
+                       PolicySpec rule, and report offline behavior separately. For an \
+                       artifact generate_code built in this session, pass its \
+                       build_manifest_hash as generated_artifact instead of the files. \
                        Resource-consuming; live preflight remains separate."
     )]
     async fn verify(
         &self,
-        Parameters(input): Parameters<VerifyInput>,
+        Parameters(mut input): Parameters<VerifyInput>,
         ct: CancellationToken,
     ) -> Result<Json<VerifyOutput>, CallToolResult> {
+        self.resolve_generated_artifact(&mut input)
+            .map_err(tool_err)?;
         let build = cancel::build_config(&self.build_config, &ct);
         let out = tokio::task::spawn_blocking(move || {
             ozpb_toolkit::verify_with_build_config(&input, &build)
@@ -147,6 +153,7 @@ mod tests {
                 claimed_generated_files: Default::default(),
                 claimed_wasm_base64: None,
                 claimed_build_manifest: None,
+                generated_artifact: None,
             },
             candidate_context_rule_id: 7,
             run_nonce: "22".repeat(32),
@@ -240,6 +247,7 @@ mod tests {
                     claimed_generated_files: Default::default(),
                     claimed_wasm_base64: None,
                     claimed_build_manifest: None,
+                    generated_artifact: None,
                 }),
                 Default::default(),
             )
