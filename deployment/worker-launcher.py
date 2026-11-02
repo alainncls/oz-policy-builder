@@ -37,6 +37,9 @@ class Refused(Exception):
 # line could skip killing the client, run the removal before the container exists, or lose a
 # confirmation already made, and the API would then free capacity a job still holds or strand it.
 STOP = {"requested": False}
+# Written first, once the handler is installed. The API signals no earlier, because a SIGTERM
+# before the handler exists kills the launcher with nothing confirmed.
+READY = b"ready\n"
 
 
 def stop_requested(signum, frame):
@@ -258,8 +261,14 @@ def main():
         if len(sys.argv) != 1:
             raise Refused()
         install_stop_handler()
+        sys.stdout.buffer.write(READY)
+        sys.stdout.buffer.flush()
         raw = sys.stdin.buffer.read(MAX_JOB + 1)
         frame = launch(raw, load_config())
+        # Removal is confirmed and nothing is left to stop. Interpreter shutdown restores
+        # SIGTERM's default action after flushing this frame, and a late stop would then kill a
+        # launcher whose confirmation the API has to discard.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         encoded = json.dumps(frame, separators=(",", ":")).encode()
         if len(encoded) > MAX_OUTPUT:
             # Cleanup was already confirmed. Retain that fact even when framing

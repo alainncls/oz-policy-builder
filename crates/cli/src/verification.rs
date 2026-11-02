@@ -113,6 +113,7 @@ impl Command {
                             base64::engine::general_purpose::STANDARD.encode(claimed_wasm),
                         ),
                         claimed_build_manifest: Some(read_json(&manifest)?),
+                        generated_artifact: None,
                     },
                     &build.resolve()?,
                 )?;

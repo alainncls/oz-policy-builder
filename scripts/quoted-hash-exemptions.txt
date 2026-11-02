@@ -116,3 +116,43 @@ e7a8202fea1042021013194a7765d9e06a8ec63d20317fa5a481e30bae18f55d|testnet-tx|rule
 # October 26 wallet proposal-import lifecycle in docs/TESTNET-EVIDENCE-TRANCHE-2.md.
 5d35dbfdd33acfd37cfe10cbc92a616ba85253582482d618c17478460d73e290|testnet-tx|wallet passkey-authorized rule 1 installation at ledger 5402672, October 26 proposal-import run
 d558c505144dadceeefe823c7bd88e0bc22a43d646ff3fbff68c226451495c83|testnet-tx|wallet passkey-authorized rule 1 removal at ledger 5402675, October 26 proposal-import run
+
+# Controlled October 30 W3, W2 and W1 runs in docs/TESTNET-EVIDENCE-TRANCHE-2.md sections 17-19;
+# public testnet outcomes, receipts read back SUCCESS after the runs, not derivable by the offline gate.
+3193d810e0fc4b13bfef3999be6ea8f84106de211946d28eef5abd3492424ded|testnet-tx|owner swap recorded for the October 30 exact-deadline Soroswap run, ledger 5469103
+ce5f0c9bb9e901fe8db5becf6b1d1c0bf4435521bd00e5c5bcb31114e8d80bf6|testnet-tx|owner-authorized installation of the router rule (account rule ID 1), October 30 Soroswap run
+aa9b323ff88c2e831db9915fbf716b26dea6a1258f3ae353fb073a3b32aa3f47|testnet-tx|owner-authorized installation of the transfer rule (account rule ID 2), October 30 Soroswap run
+0de358d99ffa1f3eef7d82104b9a16cfdcf9fdb6838e86866238344a5567bd71|testnet-tx|delegated swap at ledger 5469126, October 30 Soroswap run
+e50bcf080e4242eb8d5440bd47693f833510adf56125f0de3325e5fa14992dfc|testnet-tx|owner-authorized transfer-rule (ID 2) removal at ledger 5469286
+42a873f4ce24529ab7b6b2094e58d1e215224ca2389cb6e926f09ff4184abcdc|testnet-tx|owner-authorized router-rule (ID 1) removal at ledger 5469288
+ab9dd23eded68d75ca8b998fd1a3ff586f1d7f131644c91cf0574fadccbdf282|testnet-tx|spending-limit policy instance creation that restored its archived Wasm at ledger 5469296, October 30 subscription run
+a7f35a1eac86697135bf72482bf4a935a9262057494e9890bec88ea43ecd10ab|testnet-tx|rule 1 installation for the October 30 subscription run
+dbbeed5f5dbb8e6d04640cb7fcf393ede420fd087fea8fc1dfd8a1b0b0709cff|testnet-tx|first delegated subscription charge at ledger 5469310
+650109acfcc90d9bcc3bce1b97ec84fe737bf6c17fe83377593e11b9649acaea|testnet-tx|second delegated subscription charge at ledger 5469323
+0d71aee778c5b2c5a0e8e42c6c30d8ef9526642f081180463c9a1d79fe845778|testnet-tx|owner-authorized rule 1 removal at ledger 5469338, October 30 subscription run
+893ccc3882b4b5c7cf421e0ec3055022915b73dea9124990bf51aa40e015e472|testnet-tx|owner-authorized 10 USDC Blend supply at ledger 5469348 for the October 30 Blend run
+738d1d4dfe8fab4452d42dda9ac4af6d1a62476196a00c3da885552e383c687c|testnet-tx|owner claim recorded for the October 30 Blend run, ledger 5469361
+0f2e1bd49bbb992148561881a0e996327133a35218ffc3a1611c0143dc297036|testnet-tx|owner-authorized installation of the claim rule (account rule ID 1) for the October 30 Blend run
+a2e8d6f0cae95f6cd02ef5fd55dc0f6a17d9b61e89735a6cfc1cb977214ba7b4|testnet-tx|delegated Blend claim at ledger 5469375
+36cb73c8b116ad351a61cc83d0a3ec9f3fe926e330fd467f535429acc2e85bbd|testnet-tx|owner-authorized claim-rule (ID 1) removal at ledger 5469664
+b0bf45a766df6c467187386d642f296a0ff958a84ecd0596641f755659156f9f|testnet-tx|owner-authorized Blend withdrawal at ledger 5469666 for the October 30 Blend run
+
+# Controlled November 1 W1, W2 and W3 runs in docs/TESTNET-EVIDENCE-TRANCHE-2.md sections 21-23;
+# public testnet outcomes, receipts read back SUCCESS after the runs, not derivable by the offline gate.
+030e4afcb68c49d76d10280c4dab8b39b0c0ba7d71efa6c504b995ed143b5c7f|testnet-tx|owner-authorized 10 USDC Blend supply at ledger 5505146 for the November 1 Blend run
+a59c0b8369f5a7ee3e2009e5f8c849b8aff29453c90bcc0081abf40011145659|testnet-tx|owner claim recorded for the November 1 Blend run, ledger 5505160
+e88c9f0ec4bec0761305445b1e79fdfa7fd86d65b3e9ce1fea0f5e7be174ff76|testnet-tx|owner-authorized installation of the claim rule (account rule ID 1) for the November 1 Blend run
+c91173f75a00d8145d2ea16f25677aa74118989aa7f7774662990214575d09fd|testnet-tx|delegated Blend claim at ledger 5505173
+b5f500e449f8a07c03332d4b4054f0711aaecc45d9e11b87292d92b179abdeb5|testnet-tx|owner-authorized claim-rule (ID 1) removal at ledger 5505463
+13bfa08ee028769037cad3ee9afc3630692429d9dd2e87a69a57bee4ca81809a|testnet-tx|owner-authorized Blend withdrawal at ledger 5505465 for the November 1 Blend run
+a6967516a4fdd321498516f9ecd993f61b3fb2a8ba55258b3d207d3308681cea|testnet-tx|spending-limit policy instance creation, no restore needed, at ledger 5505472, November 1 subscription run
+a6a1cf4ca90d5f67231dee46f556680bb5761392723df34af1c76ca6d165251b|testnet-tx|rule 1 installation for the November 1 subscription run
+84817a2ab18b683603da453bdcb17369d2013941b1800631da9859d898e0e828|testnet-tx|first delegated subscription charge at ledger 5505486
+51208efe67ed81962ef0e7c96fd3f444e9c676d1b5b9fab8a066302e64e54eab|testnet-tx|second delegated subscription charge at ledger 5505499
+b23c676a68f67687d5ffc8419d3992625fc42561c791f52380d3113864715071|testnet-tx|owner-authorized rule 1 removal at ledger 5505514, November 1 subscription run
+9a0fb239c172dad0af48cfbeca470f4b628bb3ba68bd55c31f60ec8ef6b57930|testnet-tx|owner swap recorded for the November 1 exact-deadline Soroswap run, ledger 5505524
+7ba01519b31eb23f1a4162f19aea43d4686f746957acf839f0d363b191d3729b|testnet-tx|owner-authorized installation of the router rule (account rule ID 1), November 1 Soroswap run
+47afb0b3718448473a035c670f8f31ea3bda6c74afa9a6368ec846f566417c0b|testnet-tx|owner-authorized installation of the transfer rule (account rule ID 2), November 1 Soroswap run
+8471e2feea4ecf3e355d6bc14b21274dfd1bb7bd89ee3a42a6cf2e7e5263c1f5|testnet-tx|delegated swap at ledger 5505544, November 1 Soroswap run
+6d6ec0ea62c65d3d7ae6ab7ec491e80868256bd846f34f1cda6792124b4e4209|testnet-tx|owner-authorized transfer-rule (ID 2) removal at ledger 5505707
+e16cd26da8b385f20a56df6aac0978fc80c16b31a473fca8cd8771708a27b933|testnet-tx|owner-authorized router-rule (ID 1) removal at ledger 5505708

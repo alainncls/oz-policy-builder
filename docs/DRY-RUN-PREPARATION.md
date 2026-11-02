@@ -18,7 +18,11 @@ The typed `DryRunInput` contains:
 - `candidate`: the existing `CheckPolicyCallSurfaceInput`, including the exact spec, rule,
   policy bindings, signed registry, account, network and operator RPC-source name.
 - `artifact`: `VerifyInput` for exactly the same spec and rule, with source, Wasm and
-  BuildManifest claims.
+  BuildManifest claims. Over MCP it may instead carry `generated_artifact`, the
+  `build_manifest_hash` of an artifact `generate_code` built earlier in the same session; that
+  server substitutes the stored source, Wasm and manifest before anything is checked, so the
+  run hash covers those bytes exactly as if the client had sent them. The CLI and toolkit refuse
+  a reference. A hosted session forgets its artifacts when it ends.
 - `candidate_context_rule_id`: the proposed chain ID, independently of the spec index.
   No live read has established that this is the next ID.
 - `run_nonce`: a canonical lowercase 32-byte hex nonce distinguishing this run.

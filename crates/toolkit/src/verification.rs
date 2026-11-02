@@ -88,11 +88,26 @@ fn rule_behavior(report: &EvidenceReport, rule_index: usize) -> RuleBehavior {
     }
 }
 
+/// Refuse a `generated_artifact` reference. Only the MCP session that generated the artifact can
+/// resolve one, and it replaces the reference with the bytes before calling here: evidence is
+/// bound to what was checked, never to a name for it.
+pub(crate) fn refuse_artifact_reference(input: &VerifyInput) -> Result<(), ToolError> {
+    match input.generated_artifact {
+        Some(_) => Err(ToolError::new(
+            EC::ESpecInvalid,
+            "generated_artifact is resolved only by the MCP session that generated it; send the \
+             claimed files, Wasm and BuildManifest instead",
+        )),
+        None => Ok(()),
+    }
+}
+
 /// Reproduce generated files and Wasm, and report each verification dimension separately.
 pub fn verify_with_build_config(
     input: &VerifyInput,
     build_config: &super::BuildConfig,
 ) -> Result<VerifyOutput, ToolError> {
+    refuse_artifact_reference(input)?;
     let spec: PolicySpec = from_value(&input.spec)?;
     let validated = spec.validate().map_err(|errors| spec_error(&errors))?;
     let generated = generate_code_with_build_config(
@@ -197,6 +212,28 @@ mod tests {
     use crate::test_support::{build_config, wire_spec};
     use ozpb_policy_spec::PolicyRef;
 
+    /// A reference names an artifact only the MCP session that generated it holds. Anywhere
+    /// else it would be evidence bound to a name instead of to the bytes, so it is refused
+    /// before anything is built.
+    #[test]
+    fn an_artifact_reference_is_refused_outside_the_session_that_generated_it() {
+        let input = VerifyInput {
+            spec: serde_json::to_value(wire_spec().spec()).unwrap(),
+            rule_index: 0,
+            claimed_generated_files: BTreeMap::new(),
+            claimed_wasm_base64: None,
+            claimed_build_manifest: None,
+            generated_artifact: Some("ab".repeat(32)),
+        };
+        let error = verify_with_build_config(&input, &build_config()).unwrap_err();
+        assert_eq!(error.code, EC::ESpecInvalid);
+        assert!(
+            error.message.contains("generated_artifact"),
+            "{}",
+            error.message
+        );
+    }
+
     #[test]
     fn reference_suite_reports_layer_one_evidence_and_coverage() {
         let spec = serde_json::to_value(wire_spec().spec()).unwrap();
@@ -264,6 +301,7 @@ mod tests {
                 claimed_generated_files,
                 claimed_wasm_base64: Some(generated.wasm_base64),
                 claimed_build_manifest: Some(generated.build_manifest),
+                generated_artifact: None,
             },
             &build_config,
         )
@@ -303,6 +341,7 @@ mod tests {
             claimed_generated_files,
             claimed_wasm_base64: Some(generated.wasm_base64),
             claimed_build_manifest: Some(generated.build_manifest),
+            generated_artifact: None,
         };
 
         for path in ["Cargo.toml", "rust-toolchain.toml", "rustfmt.toml"] {
@@ -416,6 +455,7 @@ mod tests {
                 claimed_generated_files,
                 claimed_wasm_base64: Some(generated.wasm_base64),
                 claimed_build_manifest: Some(generated.build_manifest),
+                generated_artifact: None,
             },
             &build_config,
         )
