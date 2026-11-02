@@ -28,7 +28,9 @@ a while before retrying. Start the first plugin session with a longer startup ti
 MCP_TIMEOUT=900000 claude --plugin-dir .
 ```
 
-Later sessions rebuild only what changed.
+The session opens while the server is still building; wait until `/mcp` lists `ozpb` as
+connected before asking for anything, or the agent finds no tools. Later sessions rebuild only
+what changed.
 For direct tool use, the repository's `.mcp.json` also points at
 `scripts/mcp-server-dev.sh`. The wrapper refreshes plugin builds in Claude's persistent
 plugin data directory and starts the server with development registry trust configured;
