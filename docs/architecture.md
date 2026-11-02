@@ -1243,8 +1243,13 @@ the core consumes: schema and implementation cannot drift. Annotations are set p
 the handler struct is transport-agnostic (`serve(stdio())` and `StreamableHttpService` wrap
 the same handler); hosted auth, rate limits, and quotas are tower layers around the HTTP
 service, never code inside tools. The bound on concurrent builds is the build runner's own,
-because a build outlives the HTTP exchange that started it. Tools hold no per-session state by design, so the bundled
-`LocalSessionManager` suffices and horizontal scaling needs no sticky sessions.
+because a build outlives the HTTP exchange that started it. Each MCP session retains up to eight
+generated artifacts in memory so verification can refer to their manifest hashes instead of
+copying source and Wasm through the client. These references are session-local and disappear
+when the session ends or the server restarts; this is not stateless per-request processing.
+The bundled `LocalSessionManager` owns those sessions, so a session's HTTP requests must reach
+the same backend instance. If a reference is unavailable, regenerate the artifact or provide
+its claimed files, Wasm and manifest. No shared or durable artifact service is supplied.
 
 **Contract specifics.** Templates are ordinary `#![no_std]` contract crates pinned
 to the workspace `soroban-sdk` + `stellar-accounts` versions; storage keys are

@@ -140,9 +140,12 @@ tracing, body logging, crash uploads or request analytics. This reduces diagnost
 operator investigating startup failure should reproduce with synthetic input in an isolated
 environment and review any output before retaining it.
 
-Request data is processed in memory and temporary files. Build artifacts and cache data can
-remain in tmpfs until container removal; there is no configured backup or durable request
-storage. Deletion means removing both containers and their tmpfs, and removing any operator
+Request data is processed in memory and temporary files. Each MCP session also retains up to
+eight generated artifacts in memory for verification by reference. This is a count limit,
+not a one-megabyte cap. References are confined to that session and backend instance and are
+lost when the session ends or the server restarts; route an existing session to the same
+backend. Build artifacts and cache data can remain in tmpfs until container removal; there
+is no configured backup or durable request storage. Deletion means removing both containers and their tmpfs, and removing any operator
 exports separately. Host swap, host crash dumps and external proxy/monitoring retention are
 the host operator's responsibility. Treat unsigned simulations and generated source as
 confidential, and offer local stdio processing for material that should never leave a client.

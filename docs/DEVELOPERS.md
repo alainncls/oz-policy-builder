@@ -392,6 +392,10 @@ to `OZPB_RPC_ALLOWLIST` on a hosted server. `verify` and `prepare_dry_run` also 
 `generated_artifact`, the `build_manifest_hash` of an artifact `generate_code` built earlier in
 the same MCP session, in place of the claimed files, Wasm and manifest; the server substitutes
 them before checking, keeps the last eight per session, and the CLI refuses a reference.
+Eight artifacts is the count limit, not a fixed one-megabyte memory limit: size depends on the
+generated source, Wasm and metadata. This in-memory store is not shared across sessions or
+backend instances and is lost when the session ends or the process restarts. Keep a session
+on the same backend; if its reference is unavailable, generate again or send the artifact bytes.
 `scripts/mcp-server-dev.sh` configures exactly one source,
 `testnet` (SDF's public testnet RPC unless `OZPB_DEV_TESTNET_RPC_URL` names another `https://`
 endpoint), and replaces any map already in the environment; it never configures another
