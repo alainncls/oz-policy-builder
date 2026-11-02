@@ -398,6 +398,8 @@ backend instances and is lost when the session ends or the process restarts. Kee
 on the same backend; if its reference is unavailable, generate again or send the artifact bytes.
 For a [paired local wallet](AGENT-WALLET-HANDOFF.md), `connect_wallet` exchanges the one-time
 wallet code and `send_wallet_proposal` stages an unverified draft after chat confirmation.
+Their failures use five `E_WALLET_*` codes, one per next step; see
+[When the wallet refuses](AGENT-WALLET-HANDOFF.md#when-the-wallet-refuses).
 The stdio launcher configures a literal-loopback bridge; hosted HTTP MCP disables it. This
 credential grants no wallet signing or installation authority.
 

@@ -238,8 +238,10 @@ function PolicyBuilder() {
     }
   }, []);
   const agentActive = Boolean(state?.agent);
+  // A connection made before this page was opened is followed too, until it ends.
+  const agentWatched = agentActive || Boolean(state?.agentStale);
   useEffect(() => {
-    if (!agentActive) return;
+    if (!agentWatched) return;
     let stopped = false, polling = false;
     const poll = async () => {
       if (stopped || polling) return;
@@ -251,7 +253,7 @@ function PolicyBuilder() {
     const timer = window.setInterval(() => void poll(), 2000);
     void poll();
     return () => { stopped = true; window.clearInterval(timer); };
-  }, [agentActive]);
+  }, [agentWatched]);
   useEffect(() => {
     setTransactionHash(state?.sampleTransactionHash ?? "");
   }, [state?.sampleTransactionHash, state?.wallet?.contractId]);
@@ -329,8 +331,16 @@ function PolicyBuilder() {
         <button className={button} disabled={busy || !state?.wallet || !state?.status?.capabilities.agentHandoff
           || (!state?.delegate && !state?.status?.capabilities.accountCheck && !state?.status?.capabilities.liveCheck)}
           onClick={() => void run(value => value.connectAgent())}>{agentActive ? "Reconnect Claude" : "Connect Claude"}</button>
-        {state?.agent && <button className={button} disabled={busy}
+        {(state?.agent || state?.agentStale) && <button className={button} disabled={busy}
           onClick={() => void run(value => value.disconnectAgent())}>Disconnect Claude</button>}
+        {state?.agentStale && <p className="rounded-lg border border-amber-600 p-3 text-sm" role="status">
+          {state.agentStale.connection
+            ? `Claude is still connected from before this page was opened, for up to ${Math.ceil(state.agentStale.connection.expiresInSeconds / 60)} more minutes.`
+            : "A pairing code from before this page was opened is still valid; if Claude uses it, this page cannot review what it sends."}
+          {state.agentStale.pending && " A proposal it sent is waiting, but this page cannot review it."}
+          {" "}Disconnect Claude to end it. Connect Claude replaces it with a new automation
+          delegate, so Claude must build the grant again for that delegate.
+        </p>}
         {state?.agent?.pairingCode && <div className="space-y-3 rounded-lg border border-cyan-700 p-4">
           <p>Paste this one-time code into Claude and ask it to connect your wallet. It expires in five minutes.</p>
           <code className="block break-all select-all text-sm">{state.agent.pairingCode}</code>
@@ -339,6 +349,8 @@ function PolicyBuilder() {
         </div>}
         {state?.agent?.connection && <p className="text-sm text-cyan-200">
           Claude is connected for up to {Math.ceil(state.agent.connection.expiresInSeconds / 60)} more minutes.
+          Keep this page open until you review Claude's proposal, and review it within five minutes of its
+          arrival: reopening the page needs a new connection, and Claude must then build the grant again.
           Use Disconnect Claude to end it; closing this page does not guarantee disconnection.
         </p>}
         {state?.agent?.pending && <div className="space-y-3 rounded-lg border border-amber-600 p-4" role="status">

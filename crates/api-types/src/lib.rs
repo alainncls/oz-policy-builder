@@ -136,6 +136,19 @@ error_codes! {
     /// archived entries, or a footprint entry archived or expiring at the captured ledger.
     /// Capture never performs a restoration.
     ETargetArchived => "E_TARGET_ARCHIVED",
+    // local wallet handoff: each code names what the agent can do next
+    /// No local wallet bridge on this server (hosted MCP never has one), the wallet did not
+    /// answer, or its reply was not understood. Offer the manual install skill.
+    EWalletUnavailable => "E_WALLET_UNAVAILABLE",
+    /// No usable connection: the pairing code was refused, or the connection expired, was
+    /// replaced or reached its delivery limit. The user selects Connect Claude for a fresh code.
+    EWalletPairingRequired => "E_WALLET_PAIRING_REQUIRED",
+    /// The wallet is in the middle of another action. Retryable with identical input.
+    EWalletBusy => "E_WALLET_BUSY",
+    /// A different proposal from this session is still waiting for the user in the wallet.
+    EWalletDraftPending => "E_WALLET_DRAFT_PENDING",
+    /// The wallet refused the proposal's content. Reconnecting does not help.
+    EWalletProposalRefused => "E_WALLET_PROPOSAL_REFUSED",
     // rpc / transport
     ERpc => "E_RPC",
     // catch-all internal

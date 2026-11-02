@@ -12,6 +12,10 @@ export interface WalletState {
     readonly connection: { readonly account: string; readonly delegate: string; readonly connectionId: string;
       readonly expiresInSeconds: number } | null;
     readonly pending: { readonly deliveryId: string; readonly proposal: string } | null } | null;
+  /** A connection made before this page was opened; it can only be ended or replaced. */
+  readonly agentStale: { readonly pairingPending: boolean;
+    readonly connection: { readonly account: string; readonly delegate: string; readonly expiresInSeconds: number } | null;
+    readonly pending: boolean } | null;
   readonly busy: boolean;
   readonly status: (Details & { capabilities: Readonly<Record<string, boolean>>; verification?: unknown }) | null;
   readonly wallet: WalletIdentity | null;

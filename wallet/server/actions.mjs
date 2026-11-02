@@ -246,7 +246,7 @@ export function createWalletActions({ session, toolchain, network, native = null
     'confirm-account': async (input) => {
       exact(input, ['id']);
       return session.consume(input.id, 'create_account', async (selected) => {
-      if (handoff.view().pairingPending || handoff.view().connection) refuse();
+        if (handoff.view().pairingPending || handoff.view().connection) refuse();
         if (accountAttempted) refuse();
         accountAttempted = true;
         await network.assertTestnet();

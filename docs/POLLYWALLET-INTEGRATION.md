@@ -136,8 +136,10 @@ notification; select **Review proposal from Claude** to enter the same independe
 and permission-comparison path described below. Delivery alone starts no RPC, build, deployment
 or signing, and retains the current review and grant recovery controls. This is a same-machine,
 local-stdio integration; remote hosted MCP has no access to the user's loopback wallet.
-See [Direct local handoff](AGENT-WALLET-HANDOFF.md) for pairing, expiry, retry and disconnect
-semantics. Paste/file import remains the fallback.
+Keep the page open from **Connect Claude** until you review the proposal: a reopened page
+shows the earlier connection and offers **Disconnect Claude**, but cannot review its draft.
+See [Direct local handoff](AGENT-WALLET-HANDOFF.md) for pairing, expiry, retry, refusal and
+disconnect semantics. Paste/file import remains the fallback.
 
 ## Importing an agent proposal
 

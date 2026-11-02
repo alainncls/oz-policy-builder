@@ -20,7 +20,7 @@ export class WalletController {
     review: null, accountPreview: null, deployPreview: null, installation: null, receipt: null,
     sample: null, samplePreview: null, sampleTransactionHash: null, sampleAttempted: false, delegate: null, livePreview: null,
     replay: null, installPreview: null, installAttempted: false, installRuleId: null, revokePreview: null, revokeAttempted: false,
-    removal: null, monitor: null, replacementPreview: null, replacementPending: null, replacement: null, installOwner: null, proposalReview: null, agent: null, busy: false });
+    removal: null, monitor: null, replacementPreview: null, replacementPending: null, replacement: null, installOwner: null, proposalReview: null, agent: null, agentStale: null, busy: false });
   constructor({ request, validators, sign, origin, pins, onChange = () => {},
     pause = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); }) }) {
     this.#request = request; this.#validators = validators; this.#sign = sign;
@@ -79,7 +79,27 @@ export class WalletController {
     return null;
   }
   async connect() {
-    return this.#act(() => this.#status());
+    return this.#act(async () => {
+      const status = await this.#status();
+      if (status.capabilities?.agentHandoff === true && !this.#state.agent) await this.#staleAgent();
+      return status;
+    });
+  }
+  /** A reopened page cannot review a draft for a delegate it no longer holds; it can only end that connection. */
+  async #staleAgent() {
+    const epoch = this.#agentEpoch;
+    let inbox;
+    try { inbox = await this.#request('agent-inbox', {}); } catch { return; }
+    // A slow read cannot bring back a connection the user has since ended or replaced.
+    if (epoch !== this.#agentEpoch || this.#state.agent) return;
+    const c = inbox?.connection ?? null;
+    const connection = c && typeof c.account === 'string' && typeof c.delegate === 'string'
+      && c.networkId === this.#pins.networkId && Number.isSafeInteger(c.expiresInSeconds)
+      && c.expiresInSeconds >= 1 && c.expiresInSeconds <= 1800
+      ? { account: c.account, delegate: c.delegate, expiresInSeconds: c.expiresInSeconds } : null;
+    const pairingPending = inbox?.pairingPending === true;
+    this.#set({ agentStale: connection || pairingPending
+      ? { pairingPending, connection, pending: connection !== null && inbox?.pending != null } : null });
   }
   /** Read the backend's status again, adopting an installation it confirmed after a lost response. */
   async refreshStatus() {
@@ -197,7 +217,7 @@ export class WalletController {
         // explicit Connect action revokes any prior draft connection before rotating it.
         const disconnected = await this.#request('disconnect-agent', {});
         if (disconnected?.disconnected !== true) throw refused();
-        this.#set({ agent: null });
+        this.#set({ agent: null, agentStale: null });
         const result = await this.#request('create-delegate', {});
         if (!HASH.test(result?.capabilityId) || !/^G[A-Z2-7]{55}$/.test(result.address ?? '')) throw refused();
         delegate = { capabilityId: result.capabilityId, address: result.address }; this.#set({ delegate });
@@ -205,11 +225,12 @@ export class WalletController {
       const paired = await this.#request('pair-agent', { wallet, delegate });
       if (!/^ozpb-pair-[0-9a-f]{64}$/.test(paired?.pairingCode ?? '') || paired.account !== wallet.contractId
         || paired.delegate !== delegate.address || paired.expiresInSeconds !== 300) throw refused();
-      this.#set({ agent: { pairingCode: paired.pairingCode, connection: null, pending: null } });
+      this.#set({ agent: { pairingCode: paired.pairingCode, connection: null, pending: null }, agentStale: null });
     });
   }
   async refreshAgentInbox() {
-    if (this.#busy || !this.#state.agent) return;
+    if (this.#busy) return;
+    if (!this.#state.agent) { if (this.#state.agentStale) await this.#staleAgent(); return; }
     const epoch = this.#agentEpoch;
     const result = await this.#request('agent-inbox', {});
     // A slow poll cannot resurrect a connection after a user disconnected or re-paired.
@@ -235,7 +256,7 @@ export class WalletController {
       this.#agentEpoch++;
       const result = await this.#request('disconnect-agent', {});
       if (result?.disconnected !== true) throw refused();
-      this.#set({ agent: null });
+      this.#set({ agent: null, agentStale: null });
     });
   }
   async dismissAgentProposal() {

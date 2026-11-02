@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { AgentHandoff, PAIR_TTL_MS, CONNECTION_TTL_MS, DRAFT_TTL_MS } from '../server/agent-handoff.mjs';
+import { AgentHandoff, AgentRefusal, PAIR_TTL_MS, CONNECTION_TTL_MS, DRAFT_TTL_MS } from '../server/agent-handoff.mjs';
 import { proposalFixture } from './proposal-fixture.mjs';
 
 const digest = (text) => createHash('sha256').update(text).digest('hex');
@@ -117,4 +117,53 @@ test('direct connection advertises and enforces the executable call cap rather t
   changed.decisions.max_calls = 512; changed.expected_grant.rules[0].max_calls = 512;
   const exact = JSON.stringify(changed);
   assert.equal(f.bridge.deliver(f.connection.capability, { deliveryId: digest(exact), proposal: exact }).status, 'pending');
+});
+
+const reason = (attempt) => {
+  try { attempt(); } catch (error) { return error instanceof AgentRefusal ? error.reason : `untyped: ${error.message}`; }
+  return 'accepted';
+};
+
+test('refusals name what the agent can do; content is judged only after the capability', () => {
+  const f = fixture(); const cap = f.connection.capability;
+  const changed = (mutate) => {
+    const p = structuredClone(f.proposal); mutate(p); const proposal = JSON.stringify(p);
+    return { deliveryId: digest(proposal), proposal };
+  };
+  assert.equal(reason(() => f.bridge.connect('ozpb-pair-' + 'b'.repeat(64))), 'pairing_refused');
+  assert.equal(reason(() => f.bridge.connect(f.paired.pairingCode)), 'pairing_refused');
+  // Without the capability nothing about the content or the draft state is disclosed.
+  for (const delivery of [{ deliveryId: 'x', proposal: '{}' }, changed((p) => { p.decisions.delegate = 'G'.repeat(56); }), f.delivery]) {
+    assert.equal(reason(() => f.bridge.deliver('c'.repeat(64), delivery)), 'connection_unavailable');
+  }
+  for (const delivery of [{ deliveryId: '0'.repeat(64), proposal: f.delivery.proposal },
+    { deliveryId: digest('{}'), proposal: '{}' }, { deliveryId: digest(' '.repeat(16385)), proposal: ' '.repeat(16385) },
+    changed((p) => { p.expected_grant.account = p.expected_grant.rules[0].context.contract; }),
+    changed((p) => { p.decisions.max_calls = 10001; p.expected_grant.rules[0].max_calls = 10001; })]) {
+    assert.equal(reason(() => f.bridge.deliver(cap, delivery)), 'proposal_invalid');
+  }
+  assert.equal(reason(() => f.bridge.deliver(cap, changed((p) => {
+    const other = p.expected_grant.rules[0].calls[0].args[1].c.eq_address.value;
+    p.decisions.delegate = other; p.expected_grant.rules[0].authorization.signers[0].delegated.address = other;
+  }))), 'delegate_mismatch');
+  assert.equal(reason(() => f.bridge.deliver(cap, changed((p) => {
+    p.decisions.max_calls = 513; p.expected_grant.rules[0].max_calls = 513;
+  }))), 'call_limit');
+  assert.equal(reason(() => f.bridge.deliver(cap, f.delivery)), 'accepted');
+  assert.equal(reason(() => f.bridge.deliver(cap, changed((p) => { p.spec_hash = 'b'.repeat(64); }))), 'draft_pending');
+  assert.equal(reason(() => f.bridge.deliver(cap, f.delivery)), 'accepted', 'a lost-response retry still gets its receipt');
+  f.advance(CONNECTION_TTL_MS);
+  assert.equal(reason(() => f.bridge.deliver(cap, f.delivery)), 'connection_unavailable');
+});
+
+test('the receipt limit has its own reason and a replay inside it still answers', () => {
+  const f = fixture(); const deliveries = [];
+  for (let i = 0; i < 8; i++) {
+    const proposal = JSON.stringify({ ...f.proposal, spec_hash: String(i).repeat(64) });
+    deliveries.push({ deliveryId: digest(proposal), proposal });
+    f.bridge.deliver(f.connection.capability, deliveries[i]); f.bridge.dismiss(deliveries[i].deliveryId);
+  }
+  const ninth = JSON.stringify({ ...f.proposal, spec_hash: '9'.repeat(64) });
+  assert.equal(reason(() => f.bridge.deliver(f.connection.capability, { deliveryId: digest(ninth), proposal: ninth })), 'delivery_limit');
+  assert.equal(f.bridge.deliver(f.connection.capability, deliveries[0]).status, 'dismissed');
 });

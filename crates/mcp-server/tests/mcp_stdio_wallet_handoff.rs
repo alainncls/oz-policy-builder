@@ -13,8 +13,12 @@ fn wallet_handoff_is_unavailable_without_an_operator_configured_local_bridge() {
     ]);
     let result = &by_id(&responses, 2)["result"];
     assert_eq!(result["isError"], true, "{result}");
-    assert!(
-        result.to_string().contains("local wallet bridge"),
+    assert_eq!(
+        result["structuredContent"]["code"], "E_WALLET_UNAVAILABLE",
         "{result}"
+    );
+    assert!(
+        result.to_string().contains("policy-builder-install"),
+        "a server without the bridge points to the manual fallback: {result}"
     );
 }

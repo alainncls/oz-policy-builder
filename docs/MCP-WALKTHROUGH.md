@@ -88,7 +88,8 @@ synthesis or a new authority or dry-run result needs a new card and a new confir
 
 For the supported same-machine wallet flow, select **Connect Claude** in the wallet and give
 Claude its one-time pairing code. After the full final card is confirmed, the skill calls
-`send_wallet_proposal` automatically. A visible unverified draft arrives in the wallet, where
+`send_wallet_proposal`, and Claude Code asks the user to approve that call; neither the plugin
+nor the skill pre-approves it. A visible unverified draft arrives in the wallet, where
 the user selects Review before independent import and the existing checks and passkey approval.
 No extra install-skill invocation or proposal JSON copying is required. See
 [Direct local handoff](AGENT-WALLET-HANDOFF.md); remote hosted MCP cannot reach a user's wallet.

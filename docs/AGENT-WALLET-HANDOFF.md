@@ -17,8 +17,10 @@ wallet-connection protocol is supplied.
 3. Describe the grant. Claude uses the returned public account, delegate and wallet limits
    when clarifying the decisions, then generates and checks the policy. Review the full final
    permission card and explicitly confirm it.
-4. Claude calls `send_wallet_proposal`. The wallet shows that an unverified proposal arrived;
-   it does not replace the current candidate or start checks merely because a draft arrived.
+4. Claude calls `send_wallet_proposal`, and Claude Code asks you to approve that call;
+   neither the plugin nor the skill pre-approves it. The wallet shows that an unverified
+   proposal arrived; it does not replace the current candidate or start checks merely because
+   a draft arrived.
 5. Select **Review proposal from Claude**. The wallet independently records the transaction,
    regenerates the artifact and compares every supported permission, using the same import
    path as manual JSON/file import. Review the result, then continue through the existing
@@ -27,15 +29,54 @@ wallet-connection protocol is supplied.
    an installed on-chain grant; the existing grant removal and recovery controls remain.
 
 The pairing code expires after five minutes and can be redeemed once. The resulting connection
-expires after thirty minutes without renewal by polling. Each pending draft expires after five
-minutes. Explicit disconnect or reconnect invalidates the previous pairing, connection and
-pending draft. Closing or reloading the browser is not a reliable revocation mechanism; server
-expiry remains authoritative. Disconnect before changing the attached account or delegate.
+expires thirty minutes after pairing; polling does not extend it. Each pending draft expires
+after five minutes, so review it soon after it arrives. Explicit disconnect or reconnect
+invalidates the previous pairing, connection and pending draft. Closing or reloading the
+browser is not a reliable revocation mechanism; server expiry remains authoritative.
+Disconnect before changing the attached account or delegate.
+
+Keep the wallet page open from **Connect Claude** until you review the proposal. The page
+holds the automation delegate's handle only in memory, and reopening it starts a new page
+session from the launcher URL. A reopened page shows that Claude is still connected, or that an
+earlier pairing code is still valid, and whether a draft is waiting, and keeps that notice up to
+date until the connection ends; it cannot review that draft. Select **Disconnect Claude**, or
+**Connect Claude**, which replaces the connection with a new automation delegate. Claude then
+has to synthesize the grant again for the new delegate and show a new card. Each such
+connection uses one of the backend's eight automation-delegate slots; restarting the wallet
+backend frees them and also ends every connection.
 
 Manual **Import a grant proposal** remains available. The human-invoked install skill is the
 fallback for an unavailable local connection or a grant outside this wallet's supported shape.
 For a previously dismissed or expired proposal, reconnect and obtain a fresh complete card
 and confirmation before sending it again; do not modify formatting to bypass a receipt.
+
+## When the wallet refuses
+
+The wallet answers a refused native request with one closed reason and never echoes the
+request. The MCP tools turn the reason into a code that says what the agent does next, and a
+fixed message; no other reply text reaches the conversation.
+
+| Code | Wallet reasons | What happens next |
+| --- | --- | --- |
+| `E_WALLET_BUSY` | `busy`, `capacity` | Retry once with identical input after a few seconds; if still busy, the user finishes the current wallet action. |
+| `E_WALLET_DRAFT_PENDING` | `draft_pending` | An earlier, different proposal from the same session is waiting; nothing was sent. If the new grant replaces it, the user dismisses it in the wallet, or, on a page reopened since pairing, disconnects and connects again. |
+| `E_WALLET_PAIRING_REQUIRED` | `pairing_refused`, `connection_unavailable`, `delivery_limit` | The code was wrong, used or expired, or the connection expired, was replaced or received eight proposals. The user selects Connect Claude for a fresh code. |
+| `E_WALLET_PROPOSAL_REFUSED` | `proposal_invalid`, `delegate_mismatch`, `call_limit` | The content was refused: malformed, not for the connected account, an unsupported shape, another delegate, or more than 512 calls. Reconnecting does not help. |
+| `E_WALLET_UNAVAILABLE` | anything else | No bridge on this server (always so for hosted MCP), no answer, or a reply that was not understood. After an unanswered send, retry the identical proposal once; otherwise use manual import. |
+
+A caller without the draft capability always gets `connection_unavailable` from
+`/agent/proposal`, before the wallet looks at the body or its own activity, so it learns
+nothing about a proposal, the pending draft or whether the wallet is busy. `/agent/connect`
+gives every refused pairing code the same `pairing_refused`, whether no pairing exists, it
+expired or the code is wrong, and checks the code without using it up before saying `busy`, so
+only the holder of a valid code learns that the browser holds the wallet. The `capacity` answer
+reflects only how many native requests are in flight. Any reply from the user after a refusal
+needs the complete card again and a new confirmation before the next send; the transcript
+checker flags a send whose bytes differ from an earlier send under the same confirmation that
+may have staged a draft: one that succeeded, got no answer, or failed with any code other than
+`E_WALLET_BUSY`, `E_WALLET_DRAFT_PENDING`, `E_WALLET_PAIRING_REQUIRED` or
+`E_WALLET_PROPOSAL_REFUSED`; a send the user declined at the approval prompt never ran. Typing
+`confirm` again under the same card does not count as a new confirmation.
 
 ## Authority and data boundaries
 
@@ -62,6 +103,10 @@ re-enqueueing, including after claim, dismissal or expiry. At most one draft and
 records are retained per connection. A `pending` receipt means staged; `claimed` means the user
 started wallet review, not that verification passed. Session expiry/re-pair clears this bounded
 memory-only state. No durable proposal service or custody is introduced.
+
+The checker accepts a delegate the user never typed only when it is the one the policy
+builder's own `connect_wallet` reported for the current connection, since the user chose that
+delegate by pairing.
 
 Chat confirmation is enforced by the skill and checked by the transcript checker; a tool input
 cannot prove human consent. The wallet's independent verification and owner signature remain

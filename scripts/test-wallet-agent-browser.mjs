@@ -61,5 +61,34 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Use this wallet locator', exact: true }).isEnabled(), true);
   assert.equal(await page.getByRole('button', { name: 'Preview deployment', exact: true }).isEnabled(), true);
   assert.ok(calls.includes('review-agent-proposal'));
-  console.log('Agent wallet UI: pairing, notification, explicit review, verified import, replay protection and disconnect pass. Controlled dependencies; no chain/signing claim.');
+  // A reopened page sees a connection made before it, cannot review its draft, and can end it.
+  await page.getByRole('button', { name: 'Connect Claude', exact: true }).click();
+  await page.getByText('Paste this one-time code into Claude', { exact: false }).waitFor();
+  const earlier = handoff.connect(await page.locator('code').filter({ hasText: /^ozpb-pair-/ }).innerText());
+  handoff.deliver(earlier.capability, { deliveryId, proposal });
+  await page.goto('about:blank');
+  await page.goto(`${origin}/policy-builder#session=${'a'.repeat(64)}`);
+  const stale = page.getByText('Claude is still connected from before this page was opened', { exact: false });
+  await stale.waitFor();
+  assert.ok((await stale.innerText()).includes('A proposal it sent is waiting, but this page cannot review it.'));
+  assert.equal(await page.getByRole('button', { name: 'Review proposal from Claude', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Disconnect Claude', exact: true }).click();
+  await stale.waitFor({ state: 'detached' });
+  assert.equal(handoff.view().connection, null);
+  // An unredeemed code from before the page was reopened is shown too; Claude redeeming it updates the notice.
+  await page.getByText('Attach an existing recognized wallet', { exact: true }).click();
+  await page.locator('#wallet-locator').fill(JSON.stringify(f.wallet));
+  await page.getByRole('button', { name: 'Use this wallet locator', exact: true }).click();
+  await page.getByRole('button', { name: 'Connect Claude', exact: true }).click();
+  await page.getByText('Paste this one-time code into Claude', { exact: false }).waitFor();
+  const unredeemed = await page.locator('code').filter({ hasText: /^ozpb-pair-/ }).innerText();
+  await page.goto('about:blank');
+  await page.goto(`${origin}/policy-builder#session=${'a'.repeat(64)}`);
+  await page.getByText('A pairing code from before this page was opened is still valid', { exact: false }).waitFor();
+  handoff.connect(unredeemed);
+  await stale.waitFor();
+  await page.getByRole('button', { name: 'Disconnect Claude', exact: true }).click();
+  await stale.waitFor({ state: 'detached' });
+  assert.equal(handoff.view().connection, null);
+  console.log('Agent wallet UI: pairing, notification, explicit review, verified import, replay protection, disconnect and reopened-page notice pass. Controlled dependencies; no chain/signing claim.');
 } finally { await browser.close(); }
