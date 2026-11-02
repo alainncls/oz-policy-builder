@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { takeSessionToken, createClient } from '../overlay/files/src/policy-builder/client/client.mjs';
+import { setup } from './actions-fixture.mjs';
 
 const token = 'a'.repeat(64);
 test('takes the session fragment once and erases it without persisting it', () => {
@@ -50,4 +52,18 @@ test('aborts a response body that stalls beyond the total request deadline', asy
   }), timeoutMs: 20 });
   await assert.rejects(request('status', {}), /wallet request refused/);
   assert.equal(cancelled, true);
+});
+
+test('sends every request the controller makes and every action the backend serves, and nothing else', async () => {
+  const controller = await readFile(new URL('../overlay/files/src/policy-builder/client/controller.mjs', import.meta.url), 'utf8');
+  const requested = new Set([...controller.matchAll(/#request\('([a-z-]+)'/g)].map((match) => match[1]));
+  const { actions } = setup();
+  assert.ok(requested.size > 20);
+  const sent = [];
+  const request = createClient(token, { fetch: async (url) => { sent.push(url); return Response.json({}); } });
+  for (const name of requested) assert.ok(Object.hasOwn(actions, name), `the backend serves ${name}`);
+  for (const name of Object.keys(actions)) await request(name, {});
+  assert.deepEqual(sent, Object.keys(actions).map((name) => `/api/policy-builder/${name}`));
+  // The monitoring action's earlier name, which no backend serves.
+  await assert.rejects(request('monitor', {}), /wallet request refused/);
 });

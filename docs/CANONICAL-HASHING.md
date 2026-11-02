@@ -119,7 +119,9 @@ from the target Wasm hash used as its map key. Existing signed snapshots omit th
 ## The encoding
 
 The mapping is from serde's data model, so the JSON on the wire and the preimage are two encodings
-of one schema: a reader holding the JSON can derive the `ScVal` from these rules alone.
+of one schema: a reader holding the JSON and the schema can derive the `ScVal` from these rules.
+The schema is needed for integers in any case — a JSON `5` does not say whether it is `U32` or
+`I64` — and also for wide integers, below.
 
 | Rust / serde | `ScVal` |
 |---|---|
@@ -158,6 +160,21 @@ carry, which is why `$schema` had to be renamed. A map *key* here is data: regis
 keyed by 64-character hex hashes, recording bundles by 56-character strkeys, templates by names
 like `policy-templates/scope@1`. None of those is a legal `Symbol`, so keys are encoded by the
 ordinary rules, which makes them `String`s.
+
+**Wide integers are strings in JSON and integers here.** Recorded nonces, recorded `i128` and
+`u64` call arguments (amounts, a swap deadline), token movement and evaluator `i128` amounts, and
+the registry's `u64` versions and `i64` validity bounds are declared with `ozpb_domain::wide_int`:
+JSON carries them as canonical decimal strings, because a JavaScript client parses JSON numbers
+as f64 and rounds anything beyond 2^53 — a recorded nonce passed back through one no longer
+matched its own raw XDR. The canonical encoder is not human-readable, so those fields still encode
+as `I64`, `U64` or `I128` by the table above, and adopting the string form changed no hash of a
+typed structure. A hash taken over caller JSON held as an untyped value — the dry-run `run_hash`
+and the policy-check `request_hash` both include the signed snapshot that way — follows its
+spelling: the same snapshot sent with numbers and with strings is two requests. JSON input
+accepts a JSON integer within the 64-bit range, or the canonical decimal string of any value
+the field's type holds.
+Signed snapshots published with numbers keep their roots and signatures; regenerated ones differ
+from them only in that form.
 
 **`Option` is wrapped, not flattened.** Soroban's own convention maps `None` to `Void` and
 `Some(v)` to `v`. That is more compact and makes `None` and `Some(())` the same bytes. Wrapping

@@ -28,7 +28,9 @@ networking are not needed during a job. Build the host binary for the host opera
 `cargo build --locked --release -p ozpb-mcp-server -p ozpb-cli`. A binary copied from an image may
 require a newer host libc; compiling the host binary avoids that assumption.
 
-Install these reviewed files using your normal host configuration system:
+Install these reviewed files using your normal host configuration system. Install the API binary
+and the launcher from the same revision: each rejects the other's output from a different one,
+and every build would then retain its slot.
 
 | Source | Host destination | Ownership and mode |
 | --- | --- | --- |
@@ -101,12 +103,12 @@ The API retains the job's capacity slot and returns a fixed, redacted error. Ins
 any remaining containers under the dedicated service account, then restart the API to restore
 capacity. A normal compilation failure releases capacity only after confirmed removal.
 
-When a client cancels the request, the API sends the launcher SIGTERM, no earlier than two
-seconds after starting it so that its handler is installed, and waits up to 45 seconds. The
-launcher stops the running job, removes its container and writes the usual frame with a null
-result; a stop requested before launch runs nothing. That confirmation releases the slot. A
-launcher that does not confirm in time is handled as one that died: its slot stays retained
-until the operator has cleaned up.
+When a client cancels the request, the API waits, within the launch's own deadline, for the
+launcher to report that its SIGTERM handler is installed, then sends it SIGTERM and waits up to 45
+seconds. The launcher stops the running job, removes its container and writes the usual frame
+with a null result; a stop requested before launch runs nothing. That confirmation releases the
+slot. A launcher that does not confirm in time is handled as one that died: its slot stays
+retained until the operator has cleaned up.
 
 ## Launcher contract for another provider
 
@@ -116,8 +118,10 @@ stdout capture, and a minimal host environment. The input is JSON with schema
 `jobs`. Time and parallelism originate in operator configuration, and the launcher must check
 them against its own ceilings. The six paths are exactly `Cargo.toml`, `Cargo.lock`,
 `rust-toolchain.toml`, `rustfmt.toml`, `src/lib.rs`, and `src/contract.rs`, with no duplicates.
-Combined UTF-8 source is at most 2 MiB and encoded input is at most 16 MiB. SIGTERM means the
-request was cancelled: stop the job, prove its removal and frame a null result.
+Combined UTF-8 source is at most 2 MiB and encoded input is at most 16 MiB. The launcher's
+stdout begins with the line `ready`, written once it handles SIGTERM and before it reads its
+input; output without that line releases no capacity. SIGTERM means the request was cancelled:
+stop the job, prove its removal and frame a null result. Once removal is confirmed, ignore it.
 
 The worker's bounded JSON result has schema `build-worker-result/v1` and `artifact`, either
 null for a failed build or an object containing `wasm_base64`, `wasm_hash`, and `toolchain`.
@@ -125,8 +129,8 @@ Toolchain contains `rustc_version`, `stellar_cli_version`, and `builder`. The wo
 claim cleanup. After independently proving the disposable job has ended and its writable
 state is gone, the launcher writes a separate object with schema `contained-build-result/v1`,
 `job_hash` (SHA-256 of the exact stdin bytes), `containment` equal to `removed`, and `result`
-containing the validated worker result or null. Both stdout layers are capped at 4 MiB;
-Wasm is capped at 2 MiB. No diagnostic strings are part of either protocol.
+containing the validated worker result or null, after its `ready` line. Both stdout layers are
+capped at 4 MiB; Wasm is capped at 2 MiB. No diagnostic strings are part of either protocol.
 
 A different provider adapter must retain the same independent runtime deadline, disposable
 filesystem/process lifecycle, resource limits, no-egress/no-secrets boundary, and teardown
