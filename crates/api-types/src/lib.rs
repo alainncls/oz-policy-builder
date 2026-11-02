@@ -513,3 +513,6 @@ mod tests {
 
 mod installed_grant;
 pub use installed_grant::*;
+
+pub mod wallet_handoff;
+pub use wallet_handoff::*;

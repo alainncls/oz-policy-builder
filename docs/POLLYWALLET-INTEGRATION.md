@@ -127,6 +127,18 @@ across its three transactions (`maxTotalFeeStroops: 30000000`).
 On SIGINT or SIGTERM the listener stops accepting new requests; an already admitted request
 can finish and write its receipt before shutdown. Keep the journal when interrupting a session.
 
+## Receiving a proposal directly from Claude
+
+Use **Connect Claude** on the Policy Builder page to pair the local agent session with this
+wallet. After the final permission card is confirmed, Claude can deliver an unverified draft
+without a separate install-skill command or copying proposal JSON. The wallet shows a
+notification; select **Review proposal from Claude** to enter the same independent regeneration
+and permission-comparison path described below. Delivery alone starts no RPC, build, deployment
+or signing, and retains the current review and grant recovery controls. This is a same-machine,
+local-stdio integration; remote hosted MCP has no access to the user's loopback wallet.
+See [Direct local handoff](AGENT-WALLET-HANDOFF.md) for pairing, expiry, retry and disconnect
+semantics. Paste/file import remains the fallback.
+
 ## Importing an agent proposal
 
 After attaching the account, open **Import a grant proposal** under **Record and generate**.

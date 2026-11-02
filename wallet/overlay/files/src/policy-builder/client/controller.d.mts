@@ -8,6 +8,10 @@ import type { LiveOwnerSignature } from '../shared/signature.mjs';
 import type { GrantProposal, ProposalReview } from '../shared/proposal.mjs';
 type Details = Readonly<Record<string, unknown>>;
 export interface WalletState {
+  readonly agent: { readonly pairingCode: string | null;
+    readonly connection: { readonly account: string; readonly delegate: string; readonly connectionId: string;
+      readonly expiresInSeconds: number } | null;
+    readonly pending: { readonly deliveryId: string; readonly proposal: string } | null } | null;
   readonly busy: boolean;
   readonly status: (Details & { capabilities: Readonly<Record<string, boolean>>; verification?: unknown }) | null;
   readonly wallet: WalletIdentity | null;
@@ -71,6 +75,11 @@ export class WalletController {
   connect(): Promise<void>;
   refreshStatus(): Promise<void>;
   attachWallet(wallet: WalletIdentity): void;
+  connectAgent(): Promise<void>;
+  refreshAgentInbox(): Promise<void>;
+  disconnectAgent(): Promise<void>;
+  dismissAgentProposal(): Promise<void>;
+  reviewAgentProposal(): Promise<void>;
   prepareAccount(credential: { credentialId: string; publicKey: string }): Promise<void>;
   confirmAccount(): Promise<void>;
   prepareSample(): Promise<void>;

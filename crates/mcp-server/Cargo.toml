@@ -25,6 +25,8 @@ axum = "0.8"
 http-body-util = "0.1"
 tokio-util = "0.7"
 url = "2"
+ureq = { workspace = true }
+ozpb-domain = { workspace = true }
 
 [dev-dependencies]
 # The stdio suite drives the real binary, so it needs the same fixtures and the same development
@@ -32,7 +34,6 @@ url = "2"
 # untested at the boundary that serves it.
 ozpb-synthesizer = { workspace = true }
 ozpb-registry = { workspace = true }
-ozpb-domain = { workspace = true }
 # The shared RPC responder derives its simulation replies from the envelope under test.
 stellar-xdr = { workspace = true }
 # `oneshot` drives the HTTP guard without a listener; already in the tree through axum.

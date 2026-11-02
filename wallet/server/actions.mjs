@@ -14,6 +14,7 @@ import { INSTALL_VALIDITY_LEDGERS, installConsent } from '../shared/install.mjs'
 import { REMOVAL_MAX_FEE_STROOPS, reviewRemoval, revokeConsent, validateRemovalAssembly } from '../shared/revoke.mjs';
 import { addedRuleId, installGate, verifyInstallation, verifyRemoval } from './install.mjs';
 import { parseGrantProposal, checkProposalArtifact } from '../shared/proposal.mjs';
+import { AgentHandoff } from './agent-handoff.mjs';
 import { DelegateCapabilities, NATIVE_LIMITS, checkDryRunPreparation, nativeJobText, runAccountExecution } from './native-execution.mjs';
 import { FRESHNESS_LEDGERS, capturedCall, capturedJobText, checkTargetCapture, runCapturedExecution } from './captured-execution.mjs';
 import { LIVE_ORIGIN, clockedLedger, consentWindow, ownerEntry, prepareLive, replayRecord, replayStatus, requireNoReplay, runLive } from './live-check.mjs';
@@ -76,7 +77,7 @@ const targetLayer = (status, detail) => ({ layer: 'captured_target', status, det
 
 /** Closed HTTP operations. Every privileged input comes from retained state or operator configuration. */
 export function createWalletActions({ session, toolchain, network, native = null, live = null, delegates = new DelegateCapabilities(),
-  pause = sleep }) {
+  pause = sleep, handoff = new AgentHandoff() }) {
   const deployments = new Map();
   const attemptedArtifacts = new Set();
   const reviews = new Map();
@@ -182,17 +183,49 @@ export function createWalletActions({ session, toolchain, network, native = null
       if (absent.status !== 'absent' || absent.ledger - owner.ledger > 12) refuse();
     }
   }
+  const importProposal = async (input) => {
+      exact(input, ['proposal', 'wallet']);
+      const wallet = walletIdentity(input.wallet);
+      const proposal = parseGrantProposal(input.proposal, wallet.contractId);
+      await network.assertTestnet();
+      await network.requireInstance(wallet.contractId, ACCOUNT_WASM);
+      await network.requireInstance(wallet.verifier, WEBAUTHN_WASM);
+      const record = await toolchain.record({ transactionHash: proposal.transaction_hash, accountAddress: wallet.contractId });
+      const d = proposal.decisions;
+      const artifact = await toolchain.generate({ recordId: record.recordId, delegateAddress: d.delegate,
+        validUntilLedger: d.valid_until_ledger, maxCalls: d.max_calls, grantName: d.grant_name,
+        currentLedger: await network.latestLedger(), proposal });
+      return { record, artifact, proposalReview: checkProposalArtifact(proposal, artifact) };
+    };
   /** Public summaries, so a lost response can be recovered from `status`. */
   const summaries = () => [...installations.values()].map(({ record, removal, removalAttempted }) => ({
     installationId: record.installationId, status: record.status, account: record.account, ruleId: record.ruleId,
     transactionHash: record.transactionHash, ledger: record.ledger, removalAttempted,
     removal: removal ? { status: removal.status, transactionHash: removal.transactionHash } : null }));
   return {
+    'pair-agent': async (input) => {
+      exact(input, ['wallet', 'delegate']);
+      const wallet = walletIdentity(input.wallet);
+      exact(input.delegate, ['address', 'capabilityId']);
+      delegates.check(input.delegate.capabilityId, input.delegate.address);
+      return handoff.pair({ wallet, delegate: input.delegate });
+    },
+    'agent-inbox': async (input) => { exact(input, []); return handoff.view(); },
+    'disconnect-agent': async (input) => { exact(input, []); handoff.disconnect(); return { disconnected: true }; },
+    'dismiss-agent-proposal': async (input) => { exact(input, ['deliveryId']); return handoff.dismiss(input.deliveryId); },
+    'review-agent-proposal': async (input) => {
+      exact(input, ['deliveryId', 'wallet', 'delegate']);
+      const wallet = walletIdentity(input.wallet);
+      exact(input.delegate, ['address', 'capabilityId']);
+      delegates.check(input.delegate.capabilityId, input.delegate.address);
+      const proposal = handoff.claim(input.deliveryId, { wallet, delegate: input.delegate });
+      return importProposal({ proposal, wallet });
+    },
     status: async (input) => {
       exact(input, []);
       return { networkId: NETWORK_ID, network: 'testnet', accountWasm: ACCOUNT_WASM, verifierWasm: WEBAUTHN_WASM,
         maxFeeStroops: MAX_FEE_STROOPS, maxUploadFeeStroops: MAX_UPLOAD_FEE_STROOPS, maxValidityLedgers: 120,
-        capabilities: { record: true, generate: true, importProposal: true, deploy: true, sampleTransfer: true, accountCheck: native !== null,
+        capabilities: { agentHandoff: true, record: true, generate: true, importProposal: true, deploy: true, sampleTransfer: true, accountCheck: native !== null,
           liveCheck: live !== null, monitoring: [...installations.values()].some((held) => held.record.status === 'installed' && !held.removal), replacement: replaceable(), install: [...reviews.values()].some(installable),
           lifecycle: [...installations.values()].some((held) => !held.removalAttempted && Number.isSafeInteger(held.record.ruleId)) },
         installations: summaries(), replacement: lastReplacement,
@@ -202,6 +235,7 @@ export function createWalletActions({ session, toolchain, network, native = null
     },
     'prepare-account': async (input) => {
       exact(input, ['credentialId', 'publicKey']);
+      if (handoff.view().pairingPending || handoff.view().connection) refuse();
       credential(input);
       if (accountAttempted) refuse();
       const summary = { credentialId: input.credentialId, publicKey: input.publicKey, accountWasm: ACCOUNT_WASM,
@@ -212,6 +246,7 @@ export function createWalletActions({ session, toolchain, network, native = null
     'confirm-account': async (input) => {
       exact(input, ['id']);
       return session.consume(input.id, 'create_account', async (selected) => {
+      if (handoff.view().pairingPending || handoff.view().connection) refuse();
         if (accountAttempted) refuse();
         accountAttempted = true;
         await network.assertTestnet();
@@ -284,20 +319,7 @@ export function createWalletActions({ session, toolchain, network, native = null
         return { transactionHash: submitted.hash, receipt: receipt(submitted) };
       });
     },
-    'import-proposal': async (input) => {
-      exact(input, ['proposal', 'wallet']);
-      const wallet = walletIdentity(input.wallet);
-      const proposal = parseGrantProposal(input.proposal, wallet.contractId);
-      await network.assertTestnet();
-      await network.requireInstance(wallet.contractId, ACCOUNT_WASM);
-      await network.requireInstance(wallet.verifier, WEBAUTHN_WASM);
-      const record = await toolchain.record({ transactionHash: proposal.transaction_hash, accountAddress: wallet.contractId });
-      const d = proposal.decisions;
-      const artifact = await toolchain.generate({ recordId: record.recordId, delegateAddress: d.delegate,
-        validUntilLedger: d.valid_until_ledger, maxCalls: d.max_calls, grantName: d.grant_name,
-        currentLedger: await network.latestLedger(), proposal });
-      return { record, artifact, proposalReview: checkProposalArtifact(proposal, artifact) };
-    },
+    'import-proposal': importProposal,
     generate: async (input) => {
       exact(input, ['recordId', 'delegateAddress', 'validUntilLedger', 'maxCalls', 'grantName']);
       return toolchain.generate({ ...input, currentLedger: await network.latestLedger() });
@@ -371,7 +393,7 @@ export function createWalletActions({ session, toolchain, network, native = null
     // against that account.
     'create-delegate': async (input) => {
       exact(input, []);
-      if (!native && !live) refuse();
+      if (!native && !live || handoff.view().pairingPending || handoff.view().connection) refuse();
       const created = delegates.create();
       // A key whose account could not be created is dropped, so a retry does not use up a slot.
       try { await network.ensureDelegateAccount(created.address); } catch { delegates.release(created.capabilityId); refuse(); }

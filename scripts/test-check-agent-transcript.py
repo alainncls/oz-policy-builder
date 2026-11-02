@@ -766,6 +766,49 @@ class Formats(unittest.TestCase):
             self.assertEqual(ran.returncode, 2)
 
 
+class DirectWalletHandoff(unittest.TestCase):
+    def events(self, body=None):
+        connection = {"connection": {"account": ACCOUNT, "delegate": DELEGATE, "networkId": NETWORK_ID,
+            "connectionId": "ef" * 32, "expiresInSeconds": 1800,
+            "limits": {"maxCalls": 10000, "maxValidityLedgers": 17280, "exactNativeTransferOnly": True}}}
+        return [call("pair", MCP + "connect_wallet", {"pairing_code": "ozpb-pair-" + "aa" * 32}),
+                result("pair", connection)] + session()[:-2] + [
+                call("deliver", MCP + "send_wallet_proposal", {"proposal_json": json.dumps(body or proposal())})]
+
+    def test_confirmed_direct_handoff_needs_no_manual_install_skill(self):
+        self.assertEqual(check(self.events()), [])
+
+    def test_direct_handoff_requires_final_confirmation(self):
+        events = self.events(); del events[CONFIRM + 2]
+        self.assertIn("handoff_without_confirmation", checks(events))
+
+    def test_direct_handoff_rechecks_proposal_provenance(self):
+        self.assertIn("proposal_provenance", checks(self.events(proposal(spec_hash="ef" * 32))))
+
+    def test_direct_handoff_requires_the_paired_account_and_delegate(self):
+        events = self.events(); del events[:2]
+        self.assertIn("wallet_connection", checks(events))
+        events = self.events()
+        events[1] = result("pair", {"connection": {"account": TARGET, "delegate": RECIPIENT, "networkId": NETWORK_ID}})
+        self.assertIn("wallet_connection", checks(events))
+
+    def test_a_new_connection_after_confirmation_requires_a_new_card(self):
+        events = self.events(); pair = events[:2]; del events[:2]
+        events[-1:-1] = pair
+        self.assertIn("handoff_without_confirmation", checks(events))
+
+    def test_malformed_direct_proposals_report_findings_without_crashing(self):
+        for key in ("expected_grant", "decisions"):
+            for value in (None, [], "not-an-object", 1):
+                body = proposal(); body[key] = value
+                self.assertIn("proposal_provenance", checks(self.events(body)))
+                self.assertIn("wallet_connection", checks(self.events(body)))
+
+    def test_an_intervening_user_question_invalidates_direct_handoff_confirmation(self):
+        events = self.events(); events[-1:-1] = [user("Can we change the recipient?")]
+        self.assertIn("handoff_without_confirmation", checks(events))
+
+
 class RepositoryConfiguration(unittest.TestCase):
     """The plugin and skills never pre-approve a tool that needs a person per call."""
 

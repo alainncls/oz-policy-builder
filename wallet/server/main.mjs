@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { loadWalletConfig } from './config.mjs';
 import { createWalletServer } from './http.mjs';
 import { WalletNetwork } from './network.mjs';
+import { AgentHandoff } from './agent-handoff.mjs';
 import { WalletSession } from './session.mjs';
 import { WalletToolchain } from './toolchain.mjs';
 
@@ -26,8 +27,9 @@ export async function createWalletRuntime(configPath, { actionsFactory } = {}) {
   const createActions = actionsFactory ?? (await import('./actions.mjs')).createWalletActions;
   const native = config.nativeExecutable ? Object.freeze({ executable: config.nativeExecutable }) : null;
   const live = config.liveHelper ? Object.freeze({ helper: config.liveHelper }) : null;
-  const actions = createActions({ session, toolchain, network, native, live });
-  const server = createWalletServer({ session, actions });
+  const handoff = new AgentHandoff();
+  const actions = createActions({ session, toolchain, network, native, live, handoff });
+  const server = createWalletServer({ session, actions, handoff });
   return { server, launchUrl: `${ORIGIN}/policy-builder#session=${secret}` };
 }
 

@@ -35,6 +35,8 @@ pub const AUTHORITY_TOOLS: &[&str] = &[
 pub const POLICY_CHECK_TOOLS: &[&str] = &["check_against_policy"];
 
 /// Read-only target-state capture through an operator-configured RPC source.
+pub const WALLET_HANDOFF_TOOLS: &[&str] = &["connect_wallet", "send_wallet_proposal"];
+
 pub const CAPTURE_TOOLS: &[&str] = &["capture_target"];
 
 /// Drive the server over stdio with a batch of newline-delimited JSON-RPC requests,
@@ -57,6 +59,7 @@ pub fn run_session_with_env(
     let mut command = Command::new(bin);
     // A test states the operator configuration it needs; an exported one must not leak in.
     command.env_remove("OZPB_RPC_SOURCES_JSON");
+    command.env_remove("OZPB_WALLET_HANDOFF_URL");
     for (key, value) in env {
         command.env(key, value);
     }
