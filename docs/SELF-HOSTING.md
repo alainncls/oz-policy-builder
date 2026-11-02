@@ -10,6 +10,11 @@ it records, synthesizes, builds and verifies policies through operator-allowed t
 sources. User signing and installation approval remain in the wallet. A working local image
 or this guide alone does not establish that the hosted service is running.
 
+For a reference deployment offered during a testnet review, publish its access window and
+shutdown condition alongside its HTTPS address. Keep the self-hostable image and instructions
+available for use after that window. A temporary testnet instance is not evidence of a
+production endpoint or an ongoing availability commitment.
+
 Use the disposable-worker mode below when preparing the hosted testnet deployment. Choosing
 its hosting provider is an operational decision, not a separate milestone requirement.
 Present the actual account, hostname/TLS plan, image digest, client access boundary, cost,

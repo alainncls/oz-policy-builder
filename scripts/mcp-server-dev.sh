@@ -27,7 +27,14 @@ if [[ ! "$TESTNET_RPC_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9.
         "(host, port, path)" >&2
     exit 2
 fi
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${CLAUDE_PLUGIN_DATA:-$HERE}/target}"
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${CLAUDE_PLUGIN_DATA:-$HERE}/target}"
+# Resolve the caller's target before the build switches to the pinned checkout. The exec
+# below must use exactly the directory Cargo writes, including for a relative override.
+case "$CARGO_TARGET_DIR" in
+    /*) ;;
+    *) CARGO_TARGET_DIR="$PWD/$CARGO_TARGET_DIR" ;;
+esac
+export CARGO_TARGET_DIR
 BIN="$CARGO_TARGET_DIR/release/ozpb-mcp-server"
 if [ -n "${CLAUDE_PLUGIN_DATA:-}" ] || [ ! -x "$BIN" ]; then
     # Cargo refreshes a plugin binary after source updates; the plugin manifest

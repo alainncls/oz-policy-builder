@@ -68,6 +68,37 @@ if [ "$(cat "$WORK/cargo-cwd" 2>/dev/null)" != "$(pwd -P)" ]; then
     fail=1
 fi
 
+# A caller's relative target directory must name the same directory for the build and exec,
+# even when the pinned-toolchain build changes its working directory. Exercise both a cold
+# target and a stale executable; plugin mode must run the refreshed binary in either case.
+cat > "$WORK/bin/cargo" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+pwd -P > "$OZPB_TEST_CARGO_CWD"
+mkdir -p "$CARGO_TARGET_DIR/release"
+cat > "$CARGO_TARGET_DIR/release/ozpb-mcp-server" <<'SERVER'
+#!/usr/bin/env bash
+printf '%s' 'fresh-plugin-server'
+SERVER
+chmod +x "$CARGO_TARGET_DIR/release/ozpb-mcp-server"
+EOF
+for target in 'cold-target' 'stale target'; do
+    if [ "$target" = 'stale target' ]; then
+        mkdir -p "$WORK/elsewhere/$target/release"
+        printf '#!/bin/sh\nprintf stale-plugin-server\n' > "$WORK/elsewhere/$target/release/ozpb-mcp-server"
+        chmod +x "$WORK/elsewhere/$target/release/ozpb-mcp-server"
+    fi
+    got="$(cd "$WORK/elsewhere" && run CLAUDE_PLUGIN_DATA="$WORK/plugin-data" \
+        CARGO_TARGET_DIR="$target" OZPB_TEST_CARGO_CWD="$WORK/cargo-cwd" \
+        PATH="$WORK/bin:$PATH")"
+    if [ "$got" != 'fresh-plugin-server' ] || \
+        [ ! -x "$WORK/elsewhere/$target/release/ozpb-mcp-server" ] || \
+        [ "$(cat "$WORK/cargo-cwd" 2>/dev/null)" != "$(pwd -P)" ]; then
+        echo "FAIL: relative target '$target' did not build and run the fresh server from the pinned checkout" >&2
+        fail=1
+    fi
+done
+
 if [ "$fail" -ne 0 ]; then
     exit 1
 fi
