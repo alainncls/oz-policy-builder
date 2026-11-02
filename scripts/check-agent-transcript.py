@@ -298,7 +298,9 @@ def permitted_calls_match(text, spec):
     end = re.search(r"(?im)^[\s>*_#|-]*(?:" + "|".join(map(re.escape, CARD_LABELS))
                     + r")[\s*_]*:", rest)
     block = rest[:end.start()] if end else rest
-    displayed = re.findall(r"\b([A-Za-z_][\w]*)\(([^()]*)\)\s+on\s+([CG][A-Z2-7]+)", block)
+    # The call and its target may each be set as inline code or emphasis.
+    displayed = re.findall(
+        r"\b([A-Za-z_][\w]*)\(([^()]*)\)[`*_]*\s+on\s+[`*_]*([CG][A-Z2-7]+)", block)
     expected = [(rule["context"]["contract"], call) for rule in spec["rules"]
                 for call in rule["allowed_calls"]]
     if len(displayed) != len(expected):
