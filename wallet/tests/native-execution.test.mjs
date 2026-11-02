@@ -128,7 +128,7 @@ test('dry-run preparation must come from the CLI for this exact request and cand
     spec_hash: H('1'), binding_set_hash: H('2'), registry_snapshot_root: H('3'), account_address: f.expected.accountAddress,
     account_code_hash: ACCOUNT_WASM, network_id: NETWORK_ID, rule_index: 0, candidate_context_rule_id: 7,
     suite_hash: f.expected.suiteHash, policy_code_hashes: { [POLICY]: H('9') } },
-    artifact_verification: { matches: true }, reference_report: { total: 6, agreements: 6, disagreements: 0,
+    artifact_verification: { matches: true }, reference_case_ledgers: f.reference.caseLedgers, reference_report: { total: 6, agreements: 6, disagreements: 0,
       outcomes: f.reference.outcomes, expected_classes: { 0: f.reference.requiredClasses } },
     layers: [{ id: 'reference', status: 'passed', reason: 'independent_reference_cases_agree', cases: 6, state_dependent: false, writes_committed: false },
       ...['account_wasm', 'captured_target', 'live_enforcement'].map((id) => ({ id, status: 'unavailable', reason: 'x', cases: 0,
@@ -139,7 +139,11 @@ test('dry-run preparation must come from the CLI for this exact request and cand
   const checked = checkDryRunPreparation(clone(output), candidate);
   assert.deepEqual(checked.expected, f.expected);
   assert.deepEqual(checked.reference, f.reference);
-  for (const change of [(o) => { o.complete = true; }, (o) => { o.layers[1].status = 'passed'; },
+  for (const change of [(o) => { delete o.reference_case_ledgers; },
+    ...[null, [], [1000], [1000, 1000, 1000, 1000, 1000, '1000'],
+      [1000, 1000, 1000, 1000, 1000, -1], [1000, 1000, 1000, 1000, 1000, 1.5],
+      [1000, 1000, 1000, 1000, 1000, 4294967296]].map((value) => (o) => { o.reference_case_ledgers = value; }),
+    (o) => { o.complete = true; }, (o) => { o.layers[1].status = 'passed'; },
     (o) => { o.layers[0].status = 'failed'; }, (o) => { o.binding.spec_hash = H('4'); },
     (o) => { o.binding.policy_code_hashes[Keypair.random().publicKey()] = H('9'); }, (o) => { o.binding.rule_index = 1; },
     (o) => { o.binding.candidate_context_rule_id = 8; }, (o) => { o.artifact_verification.matches = false; },
@@ -203,4 +207,23 @@ test('a signer for a different delegate is refused before any worker starts', as
   await assert.rejects(() => runAccountExecution({ executable: '/fixed/runtime', jobText: '{}', expected: f.expected,
     reference: f.reference, maxCalls: f.maxCalls, signer: offlineCapability(other), run }), /refused/);
   assert.equal(calls.length, 0);
+});
+
+test('native results bind each case ledger in order, including repeated and nonmonotonic values', () => {
+  const f = nativeFixture();
+  const ledgers = [1000, 999, 1001, 0, 999, 4294967295];
+  f.reference.caseLedgers = ledgers;
+  f.result.cases.forEach((item, index) => { item.ledger = ledgers[index]; });
+  assert.doesNotThrow(() => checkNativeResult(f.result, f));
+  for (const changed of [
+    (r) => { [r.cases[1].ledger, r.cases[2].ledger] = [r.cases[2].ledger, r.cases[1].ledger]; },
+    (r) => { r.cases[1].ledger = f.prepared.binding.source_ledger; },
+  ]) {
+    const result = clone(f.result);
+    changed(result);
+    assert.throws(() => checkNativeResult(result, f), /refused/);
+  }
+  for (const caseLedgers of [undefined, null, [], ['1000', ...ledgers.slice(1)], [...ledgers, 1]]) {
+    assert.throws(() => checkNativeResult(f.result, { ...f, reference: { ...f.reference, caseLedgers } }), /refused/);
+  }
 });

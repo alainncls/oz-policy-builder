@@ -79,7 +79,7 @@ export class DelegateCapabilities {
 
 /** The CLI's `prepare-dry-run` output is the independent source of run, suite and reference identities. */
 export const checkDryRunPreparation = guarded((output, candidate) => {
-  exact(output, ['schema', 'run_hash', 'binding', 'artifact_verification', 'reference_report', 'layers', 'complete', 'disclaimer']);
+  exact(output, ['schema', 'run_hash', 'binding', 'artifact_verification', 'reference_report', 'reference_case_ledgers', 'layers', 'complete', 'disclaimer']);
   const b = output.binding;
   exact(b, ['spec_hash', 'binding_set_hash', 'registry_snapshot_root', 'account_address', 'account_code_hash', 'network_id',
     'rule_index', 'candidate_context_rule_id', 'suite_hash', 'policy_code_hashes']);
@@ -99,6 +99,8 @@ export const checkDryRunPreparation = guarded((output, candidate) => {
     || !report.expected_classes || Object.keys(report.expected_classes).length !== 1
     || !Array.isArray(required) || required.length < 1 || required.some((name) => typeof name !== 'string')
     || required.some((name) => !outcomes.some((outcome) => outcome?.class === name))) refuse();
+  const caseLedgers = output.reference_case_ledgers;
+  if (!Array.isArray(caseLedgers) || caseLedgers.length !== outcomes.length || caseLedgers.some((ledger) => !u32(ledger))) refuse();
   for (const outcome of outcomes) {
     exact(outcome, ['label', 'rule_index', 'class', 'expected', 'actual', 'agree']);
     if (typeof outcome.label !== 'string' || outcome.rule_index !== 0 || typeof outcome.class !== 'string'
@@ -110,7 +112,7 @@ export const checkDryRunPreparation = guarded((output, candidate) => {
     expected: { runHash: output.run_hash, suiteHash: b.suite_hash, accountAddress: candidate.accountAddress,
       delegateAddress: candidate.delegateAddress, policyAddress: candidate.policyAddress, policyCodeHash: candidate.policyCodeHash,
       candidateContextRuleId: candidate.candidateContextRuleId, sourceLedger: candidate.sourceLedger, boundaryCases: outcomes.length },
-    reference: { outcomes, requiredClasses: required },
+    reference: { outcomes, requiredClasses: required, caseLedgers },
   });
 });
 
@@ -177,7 +179,9 @@ export const checkNativeResult = guarded((frame, { prepared, reference, maxCalls
     || frame.provenance !== PROVENANCE || frame.passed !== true || frame.complete !== false
     || !isDeepStrictEqual(frame.required_classes, reference.requiredClasses)
     || !Array.isArray(frame.cases) || frame.cases.length !== prepared.boundary_cases
-    || frame.cases.length !== reference.outcomes.length) refuse();
+    || frame.cases.length !== reference.outcomes.length
+    || !Array.isArray(reference.caseLedgers) || reference.caseLedgers.length !== frame.cases.length
+    || reference.caseLedgers.some((ledger) => !u32(ledger))) refuse();
   frame.cases.forEach((item, index) => {
     exact(item, CASE);
     const outcome = reference.outcomes[index];
@@ -187,7 +191,7 @@ export const checkNativeResult = guarded((frame, { prepared, reference, maxCalls
     if (item.case_id !== `case:${index}` || item.label !== outcome.label || item.class !== outcome.class
       || item.expected_permit !== (outcome.expected === 'permit') || item.permitted !== item.expected_permit || item.agree !== true
       || !HASH.test(item.state_before_hash) || !HASH.test(item.state_after_hash) || item.state_changed !== !unchanged
-      || !u32(item.ledger) || !nullableU32(item.counter_seed) || !nullableU32(item.counter_before)
+      || !u32(item.ledger) || item.ledger !== reference.caseLedgers[index] || !nullableU32(item.counter_seed) || !nullableU32(item.counter_before)
       || !nullableU32(item.counter_after) || item.counter_seed !== item.counter_before || !counted
       || (item.permitted ? item.refusal_contract !== null || item.refusal_code !== null
         : !predictedRefusal(item.class, item.refusal_contract === account ? 'account'

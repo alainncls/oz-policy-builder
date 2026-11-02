@@ -10,9 +10,9 @@ use rmcp::model::CallToolResult;
 use rmcp::{tool, tool_router};
 
 use ozpb_api_types::{CaptureTargetInput, CaptureTargetOutput, ErrorCode, ToolError};
-use ozpb_source_rpc::HttpTransport;
+use tokio_util::sync::CancellationToken;
 
-use crate::{internal_tool_err, tool_err, PolicyBuilderServer};
+use crate::{cancel, internal_tool_err, tool_err, PolicyBuilderServer};
 
 /// At most eight requests (the first network check, then up to two attempts of simulation,
 /// network check and entry read, the last also reading the header) at the transport's 30 s per
@@ -52,6 +52,7 @@ impl PolicyBuilderServer {
     async fn capture_target(
         &self,
         Parameters(input): Parameters<CaptureTargetInput>,
+        ct: CancellationToken,
     ) -> Result<Json<CaptureTargetOutput>, CallToolResult> {
         // Resolved first, so an unknown name or another network fails before any slot or read.
         let source = ozpb_toolkit::resolve_capture_rpc_source(
@@ -72,18 +73,21 @@ impl PolicyBuilderServer {
             })?),
             None => None,
         };
+        let work_ct = ct.child_token();
+        let reads = work_ct.clone();
         let work = tokio::task::spawn_blocking(move || {
             // Held until the blocking read stops, including after the caller stops waiting.
             let _slot = slot;
             ozpb_toolkit::capture_target_output(ozpb_source_rpc::capture_native_target(
-                &HttpTransport::new(rpc_url),
+                &cancel::transport(rpc_url, &reads),
                 &source.network_passphrase,
                 &input.envelope_xdr_base64,
             ))
         });
-        let output = tokio::time::timeout(CAPTURE_DEADLINE, work)
+        let waited = tokio::time::timeout(CAPTURE_DEADLINE, work)
             .await
             .map_err(|_| {
+                work_ct.cancel();
                 tool_err(ToolError::new(
                     ErrorCode::EResourceLimit,
                     format!(
@@ -91,7 +95,8 @@ impl PolicyBuilderServer {
                         CAPTURE_DEADLINE.as_secs()
                     ),
                 ))
-            })?
+            });
+        let output = cancel::unless_cancelled(&ct, waited)?
             .map_err(internal_tool_err)?
             .map_err(tool_err)?;
         Ok(Json(output))
@@ -129,14 +134,20 @@ mod tests {
             RpcEndpointPolicy::from_csv("https://rpc.allowed.example").unwrap(),
             std::sync::Arc::new(sources),
             crate::tests::hosted().build_config,
+            crate::tool_limits::ToolLimitConfig::parse(60, None).unwrap(),
         )
+        .unwrap()
     }
 
     #[tokio::test]
     async fn hosted_capture_refuses_an_operator_source_outside_the_allowlist() {
         let server = sessions("https://rpc.other.example")().unwrap();
         assert_eq!(
-            refusal_code(server.capture_target(Parameters(request())).await),
+            refusal_code(
+                server
+                    .capture_target(Parameters(request()), Default::default())
+                    .await
+            ),
             "E_RPC"
         );
     }
@@ -155,14 +166,22 @@ mod tests {
             .unwrap();
         drop(first);
         assert_eq!(
-            refusal_code(second.capture_target(Parameters(request())).await),
+            refusal_code(
+                second
+                    .capture_target(Parameters(request()), Default::default())
+                    .await
+            ),
             "E_RESOURCE_LIMIT"
         );
         drop(running);
         // The control reaches the envelope check, proving the busy result was the slot, and
         // gives the slot back.
         assert_eq!(
-            refusal_code(second.capture_target(Parameters(request())).await),
+            refusal_code(
+                second
+                    .capture_target(Parameters(request()), Default::default())
+                    .await
+            ),
             "E_ENVELOPE_PARSE"
         );
         assert_eq!(
@@ -177,13 +196,21 @@ mod tests {
         let mut unknown = request();
         unknown.rpc_source = "unconfigured".into();
         assert_eq!(
-            refusal_code(server.capture_target(Parameters(unknown)).await),
+            refusal_code(
+                server
+                    .capture_target(Parameters(unknown), Default::default())
+                    .await
+            ),
             "E_RPC"
         );
         let mut other_network = request();
         other_network.network_id = "00".repeat(32);
         assert_eq!(
-            refusal_code(server.capture_target(Parameters(other_network)).await),
+            refusal_code(
+                server
+                    .capture_target(Parameters(other_network), Default::default())
+                    .await
+            ),
             "E_NETWORK_MISMATCH"
         );
     }

@@ -385,7 +385,18 @@ signs, or holds keys.
 `OZPB_RPC_SOURCES_JSON` — `{"testnet": {"rpc_url": "https://…",
 "network_passphrase": "Test SDF Network ; September 2015"}}` — and the request names only the
 source; it never carries a URL. `prepare_dry_run` takes the same request and validates its
-source, but reads nothing through it. `scripts/mcp-server-dev.sh` configures exactly one source,
+source, but reads nothing through it. `record_transaction` and `record_simulation` read through
+the same map by default: the source named in `rpc_source`, or the only configured one when the
+request names none. They still accept `rpc_url` with its `network_passphrase` instead, subject
+to `OZPB_RPC_ALLOWLIST` on a hosted server. `verify` and `prepare_dry_run` also accept
+`generated_artifact`, the `build_manifest_hash` of an artifact `generate_code` built earlier in
+the same MCP session, in place of the claimed files, Wasm and manifest; the server substitutes
+them before checking, keeps the last eight per session, and the CLI refuses a reference.
+Eight artifacts is the count limit, not a fixed one-megabyte memory limit: size depends on the
+generated source, Wasm and metadata. This in-memory store is not shared across sessions or
+backend instances and is lost when the session ends or the process restarts. Keep a session
+on the same backend; if its reference is unavailable, generate again or send the artifact bytes.
+`scripts/mcp-server-dev.sh` configures exactly one source,
 `testnet` (SDF's public testnet RPC unless `OZPB_DEV_TESTNET_RPC_URL` names another `https://`
 endpoint), and replaces any map already in the environment; it never configures another
 network.
@@ -407,20 +418,29 @@ stream before the tool runs and a build outlives a client that disconnects:
 | Env | Default | What it bounds |
 |---|---|---|
 | `OZPB_HTTP_REQUESTS_PER_MINUTE` | 60 | HTTP requests admitted per fixed one-minute window, across all clients. A tool call is one request; opening a session takes several. A fixed window can admit up to twice the limit across a window boundary. |
-| `OZPB_HTTP_MAX_BODY_BYTES` | 1048576 | Request body size, at most 25165824. Raise it to serve `verify` of a large artifact or `synthesize_policy` over large recordings: a 2 MiB Wasm alone is about 2.7 MiB of base64, and each recording may carry 1 MiB of base64 evidence. |
+| `OZPB_HTTP_MAX_BODY_BYTES` | 1048576 | Request body size, at most 25165824. Raise it to serve `verify` of a large artifact sent as bytes (not needed when `verify` names an artifact of the same session by `generated_artifact`) or `synthesize_policy` over large recordings: a 2 MiB Wasm alone is about 2.7 MiB of base64, and each recording may carry 1 MiB of base64 evidence. |
+| `OZPB_HTTP_TOOL_REQUESTS_PER_MINUTE` | 60 | Calls admitted per fixed one-minute window to each tool, across all sessions and after the request quota. Tools that build or read an RPC endpoint (`generate_code`, `verify`, `prepare_dry_run`, `record_transaction`, `record_simulation`, `preflight_transaction`, `check_policy_call_surface`, `prepare_install_intent`, `assemble_install_transaction`, `check_against_policy`, `capture_target`) default to the smaller of this and 4. A refused call answers `E_RESOURCE_LIMIT`; a call that reached its tool is counted even if it then fails. |
+| `OZPB_HTTP_TOOL_LIMITS_JSON` | unset | A JSON object from tool name to its own positive per-minute limit, overriding the default above, e.g. `{"generate_code":2,"reference_suite":120}`. Empty means no overrides. An unknown tool name, a zero, or anything but positive integers stops startup. |
 | `OZPB_HTTP_MAX_CONCURRENCY` | 1 | Policy builds running at once across all sessions, including `generate_code`, `verify`, and binding rebuilds during authority checks, install-intent planning, unsigned install assembly, installed-rule checks and dry-run preparation. One more is refused at once with `E_BUILD_BUSY`, which is retryable by design. A build holds its slot until it ends. Multiplied by `OZPB_BUILD_JOBS` it must not exceed the machine's available parallelism. With the one shared build cache, cargo serializes compiles, so a second slot queues a build behind the first on its own timeout rather than running it alongside. |
 
 Zero or a malformed value stops startup. Authority checks, install-intent planning, unsigned
 install assembly, installed-rule checks, dry-run preparation and target capture, every tool
 that names an operator-configured source, also share a separate one-operation limit across
-all sessions, held until their blocking work ends even if a client disconnects. That limit is
+all sessions, held until their blocking work ends. That limit is
 independent of build capacity; their binding rebuilds acquire the same build slots as other
 tools. The RPC reads that take a caller-named endpoint (`record_*`, `preflight_transaction`)
 and pure tools use neither limit and remain bounded by the quota
 and their own size and time limits. Terminate TLS and add per-client authorization and per-client limits
 at a reverse proxy in front of it. The [disposable build-worker mode](ISOLATED-BUILDS.md)
-supplies OS-level compile isolation and a no-secrets worker role; per-tool quotas and request
-cancellation are still owed before genuine multi-tenant public hosting.
+supplies OS-level compile isolation and a no-secrets worker role.
+
+A client's `notifications/cancelled` for a tool call, or the end of its MCP session, stops the
+work that call started; as MCP specifies, the cancelled call gets no response. A local build's whole process group
+is killed and its slot released. A disposable worker's launcher is asked to stop (SIGTERM); its
+slot is released only when the launcher confirms the job's removal, and otherwise retained as
+after a launcher failure. Network reads make no further RPC call; a call already in flight ends
+on its own transport timeout. Work that passes its own deadline is stopped the same way, and the
+slots it holds are released when that stopped work ends.
 
 The [self-hosting package](SELF-HOSTING.md) supplies a pinned container build, TLS proxy,
 operator configuration and disposable endpoint/offline-build checks for one operator with

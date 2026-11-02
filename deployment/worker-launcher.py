@@ -30,6 +30,26 @@ class Refused(Exception):
     """A fixed, redacted launcher failure."""
 
 
+# A cancelled request reaches the launcher as SIGTERM from the API. The handler only records
+# it. The job's run checks that record before it starts the runtime client and on every poll,
+# and stops there, where its client is killed and its container is then removed and that removal
+# framed with no result. Nothing else is interrupted: raising from the handler at an arbitrary
+# line could skip killing the client, run the removal before the container exists, or lose a
+# confirmation already made, and the API would then free capacity a job still holds or strand it.
+STOP = {"requested": False}
+# Written first, once the handler is installed. The API signals no earlier, because a SIGTERM
+# before the handler exists kills the launcher with nothing confirmed.
+READY = b"ready\n"
+
+
+def stop_requested(signum, frame):
+    STOP["requested"] = True
+
+
+def install_stop_handler():
+    signal.signal(signal.SIGTERM, stop_requested)
+
+
 def integer(value, low, high):
     if type(value) is not int or not low <= value <= high:
         raise Refused()
@@ -102,11 +122,14 @@ def validate_job(raw, config):
     return job
 
 
-def bounded(command, timeout, limit, source=None):
+def bounded(command, timeout, limit, source=None, stoppable=False):
     """Capture bounded stdout and discard stderr; terminate only the local client on failure.
 
     This is not the container boundary. Conmon's separate deadline survives client death.
+    A `stoppable` run also ends when a stop is requested, before it starts or while it runs.
     """
+    if stoppable and STOP["requested"]:
+        raise Refused()
     process = subprocess.Popen(command, stdin=source or subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
     deadline, result = time.monotonic() + timeout, bytearray()
@@ -114,6 +137,8 @@ def bounded(command, timeout, limit, source=None):
         with selectors.DefaultSelector() as poll:
             poll.register(process.stdout, selectors.EVENT_READ)
             while poll.get_map():
+                if stoppable and STOP["requested"]:
+                    raise Refused()
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise Refused()
@@ -210,6 +235,8 @@ def launch(raw, config):
         preflight()
     except (Refused, ValueError, TypeError, KeyError, OSError, subprocess.SubprocessError):
         return frame(None)
+    if STOP["requested"]:
+        return frame(None)
     name = "ozpb-job-" + uuid.uuid4().hex
     result = None
     # A file descriptor avoids a blocked writer and is never mounted into the container.
@@ -218,7 +245,7 @@ def launch(raw, config):
         source.seek(0)
         try:
             status, output = bounded(command(config, name, job), job["timeout_seconds"] + 45,
-                                     MAX_OUTPUT, source)
+                                     MAX_OUTPUT, source, stoppable=True)
             if status == 0:
                 result = worker_result(output)
         except (Refused, ValueError, TypeError, OSError, subprocess.SubprocessError, RecursionError):
@@ -233,8 +260,15 @@ def main():
     try:
         if len(sys.argv) != 1:
             raise Refused()
+        install_stop_handler()
+        sys.stdout.buffer.write(READY)
+        sys.stdout.buffer.flush()
         raw = sys.stdin.buffer.read(MAX_JOB + 1)
         frame = launch(raw, load_config())
+        # Removal is confirmed and nothing is left to stop. Interpreter shutdown restores
+        # SIGTERM's default action after flushing this frame, and a late stop would then kill a
+        # launcher whose confirmation the API has to discard.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         encoded = json.dumps(frame, separators=(",", ":")).encode()
         if len(encoded) > MAX_OUTPUT:
             # Cleanup was already confirmed. Retain that fact even when framing

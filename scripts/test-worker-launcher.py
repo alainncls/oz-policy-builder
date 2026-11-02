@@ -3,10 +3,14 @@
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -102,7 +106,7 @@ class LauncherTests(unittest.TestCase):
 
     def test_success_is_framed_only_after_confirmed_removal(self):
         events = []
-        def run(args, *_):
+        def run(args, *_, **__):
             events.append("run")
             return 0, b'{"schema":"build-worker-result/v1","artifact":null}'
         def removed(_):
@@ -143,10 +147,70 @@ class LauncherTests(unittest.TestCase):
                 mock.patch.object(worker.sys, "stderr", io.StringIO()):
             status = worker.main()
         self.assertEqual(status, 0)
-        self.assertLessEqual(len(output.getvalue()), len(raw) + 1)
-        frame = json.loads(output.getvalue())
+        written = output.getvalue()
+        self.assertTrue(written.startswith(worker.READY))
+        written = written[len(worker.READY):]
+        self.assertLessEqual(len(written), len(raw) + 1)
+        frame = json.loads(written)
         self.assertEqual(frame["containment"], "removed")
         self.assertIsNone(frame["result"])
+
+    def test_ready_is_reported_once_the_stop_handler_is_installed_and_before_the_job_is_read(self):
+        self._stop_state()
+        seen = {}
+        class Output(io.BytesIO):
+            def write(self, data):
+                seen.setdefault("handler at ready", signal.getsignal(signal.SIGTERM))
+                return super().write(data)
+        output = Output()
+        class Input:
+            def read(self, _size):
+                seen["handler"] = signal.getsignal(signal.SIGTERM)
+                seen["written"] = output.getvalue()
+                return json.dumps(job()).encode()
+        with mock.patch.object(worker, "load_config", return_value=config()), \
+                mock.patch.object(worker, "preflight", side_effect=worker.Refused()), \
+                mock.patch.object(worker.sys, "argv", ["worker-launcher"]), \
+                mock.patch.object(worker.sys, "stdin", SimpleNamespace(buffer=Input())), \
+                mock.patch.object(worker.sys, "stdout", SimpleNamespace(buffer=output)), \
+                mock.patch.object(worker.sys, "stderr", io.StringIO()):
+            self.assertEqual(worker.main(), 0)
+        self.assertIs(seen["handler at ready"], worker.stop_requested)
+        self.assertIs(seen["handler"], worker.stop_requested)
+        self.assertEqual(seen["written"], worker.READY)
+
+    def test_a_stop_after_the_frame_is_written_cannot_kill_a_confirmed_launcher(self):
+        # Interpreter shutdown restores SIGTERM's default action after flushing the frame. A stop
+        # landing then would kill a launcher whose removal is already confirmed, and the API
+        # would retain a slot that is free.
+        frame = dict(schema="contained-build-result/v1", job_hash="0" * 64, containment="removed", result=None)
+        code = ("import importlib.util\n"
+                f"spec=importlib.util.spec_from_file_location('launcher',{str(ROOT / 'deployment/worker-launcher.py')!r})\n"
+                "m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\n"
+                "m.load_config=lambda: {}\n"
+                f"m.launch=lambda raw, config: {frame!r}\n"
+                "raise SystemExit(m.main())\n")
+        for _ in range(20):
+            process = subprocess.Popen([sys.executable, "-I", "-c", code], stdin=subprocess.DEVNULL,
+                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            try:
+                data = b""
+                while True:
+                    chunk = os.read(process.stdout.fileno(), 65536)
+                    self.assertTrue(chunk, "the launcher closed stdout without a frame")
+                    data += chunk
+                    try:
+                        self.assertEqual(json.loads(data[len(worker.READY):]), frame)
+                        break
+                    except json.JSONDecodeError:
+                        continue
+                process.send_signal(signal.SIGTERM)
+                self.assertEqual(process.wait(timeout=10), 0)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+                process.stdout.close()
 
     def test_deeply_nested_worker_json_preserves_confirmed_cleanup(self):
         raw = b"[" * 2000 + b"0" + b"]" * 2000
@@ -183,6 +247,101 @@ class LauncherTests(unittest.TestCase):
             frame = worker.launch(json.dumps(job()).encode(), config())
         run.assert_not_called()
         self.assertEqual(frame["containment"], "removed")
+
+    def _stop_state(self):
+        # Each test starts with no stop requested and restores the default SIGTERM action.
+        worker.STOP.update(requested=False)
+        self.addCleanup(signal.signal, signal.SIGTERM, signal.SIG_DFL)
+        self.addCleanup(worker.STOP.update, requested=False)
+
+    def _child(self, directory):
+        """A stand-in for the runtime client: records its pid, then runs for 30 s."""
+        pidfile = Path(directory) / "client.pid"
+        code = (f"import os,time\nopen({str(pidfile)!r}+'.tmp','w').write(str(os.getpid()))\n"
+                f"os.replace({str(pidfile)!r}+'.tmp',{str(pidfile)!r})\ntime.sleep(30)")
+        return [sys.executable, "-c", code], pidfile
+
+    @staticmethod
+    def _alive(pid):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        return True
+
+    def test_sigterm_during_the_job_kills_its_client_then_removes_it_and_frames_no_result(self):
+        self._stop_state()
+        worker.install_stop_handler()
+        removed = mock.Mock(return_value=True)
+        with tempfile.TemporaryDirectory() as directory:
+            client, pidfile = self._child(directory)
+            def stop_once_running():
+                while not pidfile.exists():
+                    time.sleep(0.02)
+                os.kill(os.getpid(), signal.SIGTERM)
+            threading.Thread(target=stop_once_running, daemon=True).start()
+            started = time.monotonic()
+            with mock.patch.object(worker, "preflight"), mock.patch.object(worker, "command", return_value=client), \
+                    mock.patch.object(worker, "removed", removed):
+                frame = worker.launch(json.dumps(job()).encode(), config())
+            self.assertLess(time.monotonic() - started, 10)
+            pid = int(pidfile.read_text())
+            self.assertFalse(self._alive(pid), "the runtime client survived the stop")
+        removed.assert_called_once()
+        self.assertEqual(frame["containment"], "removed")
+        self.assertIsNone(frame["result"])
+
+    def test_a_stop_requested_before_launch_runs_nothing(self):
+        self._stop_state()
+        worker.stop_requested(signal.SIGTERM, None)
+        with mock.patch.object(worker, "preflight"), mock.patch.object(worker, "bounded") as run, \
+                mock.patch.object(worker, "removed") as removed:
+            frame = worker.launch(json.dumps(job()).encode(), config())
+        run.assert_not_called()
+        removed.assert_not_called()
+        self.assertEqual(frame["containment"], "removed")
+        self.assertIsNone(frame["result"])
+
+    def test_a_stop_after_the_check_still_never_starts_the_client(self):
+        # SIGTERM between launch's early check and the client start (while the job file is
+        # written) is honoured by the run itself, before it starts anything.
+        self._stop_state()
+        removed = mock.Mock(return_value=True)
+        with tempfile.TemporaryDirectory() as directory:
+            client, pidfile = self._child(directory)
+            def command(*_):
+                worker.stop_requested(signal.SIGTERM, None)
+                return client
+            with mock.patch.object(worker, "preflight"), mock.patch.object(worker, "command", command), \
+                    mock.patch.object(worker, "removed", removed):
+                frame = worker.launch(json.dumps(job()).encode(), config())
+            time.sleep(0.3)
+            self.assertFalse(pidfile.exists(), "the client was started after the stop")
+        removed.assert_called_once()
+        self.assertIsNone(frame["result"])
+
+    def test_sigterm_during_removal_or_failure_handling_interrupts_nothing(self):
+        self._stop_state()
+        worker.install_stop_handler()
+        def removed(_):
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)  # a raising handler would surface here
+            return True
+        def run(*_args, **_kwargs):
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+            raise worker.Refused()  # the job failed; its handling must still frame removal
+        with mock.patch.object(worker, "preflight"), mock.patch.object(worker, "bounded", run), \
+                mock.patch.object(worker, "removed", removed):
+            frame = worker.launch(json.dumps(job()).encode(), config())
+        self.assertEqual(frame["containment"], "removed")
+        self.assertIsNone(frame["result"])
+        self.assertTrue(worker.STOP["requested"])
+
+    def test_an_unrequested_stoppable_run_is_unaffected(self):
+        self._stop_state()
+        self.assertEqual(worker.bounded([sys.executable, "-c", "print('ok')"], 5, 1024, stoppable=True),
+                         (0, b"ok\n"))
 
     def test_output_capture_is_actually_bounded(self):
         with self.assertRaises(worker.Refused):

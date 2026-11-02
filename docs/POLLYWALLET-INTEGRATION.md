@@ -260,6 +260,13 @@ deployment:
    controls and the stateful call-cap sequence, and requires a zero worker exit that leaves no
    process in the worker's group; any refusal kills the group members it can signal.
 
+Native case results are checked against the ordered synthetic case ledgers emitted by
+`prepare-dry-run` as `reference_case_ledgers`. These are boundary-test ledgers,
+not the RPC snapshot ledger. The wallet rejects missing metadata or a result at a
+different ledger; deploy the updated CLI and wallet together. Historical Rust reports
+without the metadata remain readable. This check does not add per-case signature
+expiration authorization to the offline signer.
+
 The wallet retains every checked account/captured case: its label, mutation class, expected and
 observed outcome, refusal role/code and whether state stayed unchanged. The route shows these
 under each layer. Account denials must match the mutation class's predicted policy/account error,

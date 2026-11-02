@@ -3,7 +3,8 @@
 use super::*;
 use base64::Engine;
 use std::io::{Seek, Write};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
 
 const JOB_SCHEMA: &str = "build-worker-job/v1";
 const RESULT_SCHEMA: &str = "build-worker-result/v1";
@@ -15,6 +16,50 @@ const LAUNCHER_GRACE: Duration = Duration::from_secs(90);
 // Exercise the identical timeout path without waiting for production startup/probe grace.
 #[cfg(test)]
 const LAUNCHER_GRACE: Duration = Duration::from_secs(1);
+/// How long a cancelled launcher has to remove its job and confirm it: the bounded container
+/// removal and existence check in `deployment/worker-launcher.py` take at most 25 s.
+#[cfg(not(test))]
+const CANCEL_CONFIRMATION: Duration = Duration::from_secs(45);
+#[cfg(test)]
+const CANCEL_CONFIRMATION: Duration = Duration::from_secs(2);
+
+/// What a launcher writes first, once its SIGTERM handler is installed. A signal that arrives
+/// before then kills it, which leaves its job's removal unconfirmed and its slot retained until
+/// an operator restart, so a cancellation waits for this line however long startup takes.
+const LAUNCHER_READY: &[u8] = b"ready\n";
+
+/// Ask a running launcher to stop (SIGTERM to the launcher alone, which removes its job and
+/// frames that removal) once it has reported `ready`, and wait for it to exit. `None` if it is
+/// not ready by `deadline` or does not exit in time.
+fn request_launcher_stop(
+    child: &mut std::process::Child,
+    ready: &AtomicBool,
+    deadline: std::time::Instant,
+) -> Option<std::process::ExitStatus> {
+    // It may also finish on its own before it is ready to be signalled.
+    while !ready.load(Ordering::Acquire) {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            return None;
+        }
+        if let Some(status) = child.wait_timeout(left.min(CANCEL_POLL)).ok()? {
+            return Some(status);
+        }
+    }
+    #[cfg(unix)]
+    {
+        use nix::sys::signal::{kill, Signal};
+        use nix::unistd::Pid;
+        let pid = i32::try_from(child.id()).ok()?;
+        kill(Pid::from_raw(pid), Signal::SIGTERM).ok()?;
+    }
+    #[cfg(not(unix))]
+    {
+        // No graceful stop without a signal: nothing can confirm the job is gone.
+        return None;
+    }
+    child.wait_timeout(CANCEL_CONFIRMATION).ok().flatten()
+}
 const FILES: [&str; 6] = [
     "Cargo.lock",
     "Cargo.toml",
@@ -222,6 +267,7 @@ pub(crate) fn build(
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
+    let deadline = std::time::Instant::now() + config.timeout + LAUNCHER_GRACE;
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(_) => {
@@ -232,17 +278,44 @@ pub(crate) fn build(
     };
     let stdout = child.stdout.take().ok_or(())?;
     let (sender, receiver) = mpsc::sync_channel(1);
+    let ready = Arc::new(AtomicBool::new(false));
+    let announced = Arc::clone(&ready);
     std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let read = stdout
-            .take((MAX_RESPONSE_BYTES + 1) as u64)
-            .read_to_end(&mut bytes);
-        let _ = sender.send(read.map(|_| bytes));
+        let mut stdout = stdout.take((LAUNCHER_READY.len() + MAX_RESPONSE_BYTES + 1) as u64);
+        let mut line = [0; LAUNCHER_READY.len()];
+        let read = stdout.read_exact(&mut line).and_then(|()| {
+            if line != LAUNCHER_READY {
+                return Err(std::io::ErrorKind::InvalidData.into());
+            }
+            announced.store(true, Ordering::Release);
+            let mut bytes = Vec::new();
+            stdout.read_to_end(&mut bytes).map(|_| bytes)
+        });
+        let _ = sender.send(read);
     });
     // The runtime owns the actual job deadline. This adds bounded startup, probes and cleanup.
-    let status = child.wait_timeout(config.timeout + LAUNCHER_GRACE);
+    let (status, cancelled) = wait_until(
+        &mut child,
+        deadline.saturating_duration_since(std::time::Instant::now()),
+        config.cancel.as_ref(),
+    );
     let status = match status {
         Ok(Some(status)) => status,
+        // Cancelled: ask the launcher to remove its job. Killing it would leave the container's
+        // fate unknown, so only its own confirmation, through the normal frame, can release
+        // capacity; a launcher that does not confirm in time is treated as a dead one.
+        Ok(None) if cancelled => match request_launcher_stop(&mut child, &ready, deadline) {
+            Some(status) => status,
+            None => {
+                #[cfg(unix)]
+                let _ = terminate_process_group(&child);
+                #[cfg(not(unix))]
+                let _ = terminate_process_group(&mut child);
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(());
+            }
+        },
         _ => {
             #[cfg(unix)]
             let _ = terminate_process_group(&child);
@@ -269,9 +342,13 @@ pub(crate) fn build(
     }
     // After trusted confirmation, malformed compiler output is an ordinary failed job.
     Ok((|| {
-        let result = frame
-            .result
-            .ok_or_else(|| BuildError::Failed("disposable compilation failed".into()))?;
+        let result = frame.result.ok_or_else(|| {
+            if cancelled {
+                BuildError::Cancelled
+            } else {
+                BuildError::Failed("disposable compilation failed".into())
+            }
+        })?;
         if result.schema != RESULT_SCHEMA {
             return Err(unavailable());
         }
@@ -380,7 +457,19 @@ mod tests {
         )
     }
 
+    /// Reports the launcher ready, as `deployment/worker-launcher.py` does on startup.
+    const ANNOUNCE: &str = r"import sys
+sys.stdout.write('ready\n')
+sys.stdout.flush()
+";
+
+    /// A launcher that announces itself ready before running `body`.
     fn launcher(body: &str) -> (tempfile::TempDir, BuildConfig, BuildSlots) {
+        script(&format!("{ANNOUNCE}{body}"))
+    }
+
+    /// A launcher that runs `body` alone, which writes its own ready line, or never does.
+    fn script(body: &str) -> (tempfile::TempDir, BuildConfig, BuildSlots) {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().canonicalize().unwrap().join("launcher");
         std::fs::write(&path, format!("#!/usr/bin/python3\n{body}\n")).unwrap();
@@ -438,6 +527,86 @@ print(json.dumps({'schema':'contained-build-result/v1','job_hash':hashlib.sha256
         let start = std::time::Instant::now();
         assert!(run(&generated(), &config).is_err());
         assert!(start.elapsed() < Duration::from_secs(5));
+        assert_eq!(slots.available(), 0);
+    }
+
+    /// A launcher that, like `deployment/worker-launcher.py`, reports ready once its SIGTERM
+    /// handler is installed and answers SIGTERM by removing its job and confirming that removal
+    /// with no result. Run it with `script`.
+    const CANCELLABLE: &str = r#"import hashlib,json,signal,sys,time
+data=sys.stdin.buffer.read()
+def stop(*_):
+    print(json.dumps({'schema':'contained-build-result/v1','job_hash':hashlib.sha256(data).hexdigest(),'containment':'removed','result':None}))
+    sys.exit(0)
+signal.signal(signal.SIGTERM, stop)
+sys.stdout.write('ready\n')
+sys.stdout.flush()
+time.sleep(30)"#;
+
+    fn cancelled_after(delay: Duration) -> BuildCancel {
+        let start = std::time::Instant::now();
+        BuildCancel::new(move || start.elapsed() >= delay)
+    }
+
+    #[test]
+    fn cancelled_build_with_confirmed_cleanup_releases_capacity() {
+        let (_directory, mut config, slots) = script(CANCELLABLE);
+        config.timeout = Duration::from_secs(30);
+        config.cancel = Some(cancelled_after(Duration::from_millis(300)));
+        let start = std::time::Instant::now();
+        assert_eq!(run(&generated(), &config), Err(BuildError::Cancelled));
+        assert!(start.elapsed() < Duration::from_secs(10));
+        assert_eq!(slots.available(), 1, "the launcher confirmed removal");
+    }
+
+    #[test]
+    fn an_immediate_cancellation_waits_for_a_slow_launcher_to_report_ready() {
+        // Takes three seconds to install its handler, like an interpreter on a loaded host; a
+        // SIGTERM before then would kill it and strand the slot.
+        let slow = CANCELLABLE.replace(
+            "import hashlib",
+            "import time\ntime.sleep(3)\nimport hashlib",
+        );
+        let (_directory, mut config, slots) = script(&slow);
+        config.timeout = Duration::from_secs(30);
+        config.cancel = Some(BuildCancel::new(|| true));
+        assert_eq!(run(&generated(), &config), Err(BuildError::Cancelled));
+        assert_eq!(
+            slots.available(),
+            1,
+            "the launcher lived to confirm removal"
+        );
+    }
+
+    #[test]
+    fn a_launcher_that_never_reports_ready_cannot_release_capacity() {
+        let (_directory, config, slots) = script(CONFIRMED_FAILURE);
+        assert!(run(&generated(), &config).is_err());
+        assert_eq!(slots.available(), 0);
+    }
+
+    #[test]
+    fn a_cancelled_launcher_that_is_never_ready_retains_capacity() {
+        let (_directory, mut config, slots) = script("import time\ntime.sleep(30)");
+        config.timeout = Duration::from_secs(1);
+        config.cancel = Some(BuildCancel::new(|| true));
+        let start = std::time::Instant::now();
+        assert!(run(&generated(), &config).is_err());
+        assert!(start.elapsed() < Duration::from_secs(5));
+        assert_eq!(slots.available(), 0);
+    }
+
+    #[test]
+    fn cancelled_build_without_confirmed_cleanup_retains_capacity() {
+        // Ignores SIGTERM, so nothing confirms that its job is gone.
+        let (_directory, mut config, slots) = launcher(
+            "import signal,time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\ntime.sleep(30)",
+        );
+        config.timeout = Duration::from_secs(30);
+        config.cancel = Some(cancelled_after(Duration::from_millis(300)));
+        let start = std::time::Instant::now();
+        assert!(run(&generated(), &config).is_err());
+        assert!(start.elapsed() < Duration::from_secs(10));
         assert_eq!(slots.available(), 0);
     }
 

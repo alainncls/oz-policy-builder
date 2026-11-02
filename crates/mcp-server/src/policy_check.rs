@@ -1,12 +1,13 @@
 //! Live selected-rule prediction under the same operator budgets as authority reads.
 
-use crate::{internal_tool_err, tool_err, PolicyBuilderServer};
+use crate::{cancel, internal_tool_err, tool_err, PolicyBuilderServer};
 use ozpb_api_types::{
     CheckAgainstPolicyInput, CheckAgainstPolicyOutput, ErrorCode, PolicyRecognition, ToolError,
 };
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::CallToolResult;
 use rmcp::{tool, tool_router};
+use tokio_util::sync::CancellationToken;
 
 #[tool_router(router=policy_check_tool_router,vis="pub(crate)")]
 impl PolicyBuilderServer {
@@ -24,6 +25,7 @@ impl PolicyBuilderServer {
     async fn check_against_policy(
         &self,
         Parameters(input): Parameters<CheckAgainstPolicyInput>,
+        ct: CancellationToken,
     ) -> Result<Json<CheckAgainstPolicyOutput>, CallToolResult> {
         let trust = self.registry_trust.clone().ok_or_else(|| {
             tool_err(ToolError::new(
@@ -66,7 +68,9 @@ impl PolicyBuilderServer {
             .timeout
             .saturating_mul(u32::try_from(generated).unwrap_or(u32::MAX))
             .saturating_add(std::time::Duration::from_secs(300));
-        let build = self.build_config.clone();
+        let work_ct = ct.child_token();
+        let build = cancel::build_config(&self.build_config, &work_ct);
+        let reads = work_ct.clone();
         let work = tokio::task::spawn_blocking(move || {
             // Keep the slot until blocking work actually stops, including after caller timeout.
             let _slot = slot;
@@ -75,7 +79,7 @@ impl PolicyBuilderServer {
                 Err(error) => return ozpb_toolkit::policy_check_unavailable(error),
             };
             let capture = ozpb_source_rpc::capture_policy_state(
-                &ozpb_source_rpc::HttpTransport::new(rpc_url),
+                &cancel::transport(rpc_url, &reads),
                 &source.network_passphrase,
                 &plan.account_address,
                 plan.installed_context_rule_id,
@@ -90,15 +94,15 @@ impl PolicyBuilderServer {
             })?;
             ozpb_toolkit::finish_policy_check(&plan, &capture)
         });
+        let waited = tokio::time::timeout(deadline, work).await.map_err(|_| {
+            work_ct.cancel();
+            tool_err(ToolError::new(
+                ErrorCode::EResourceLimit,
+                "live policy read exceeded its deadline",
+            ))
+        });
         Ok(Json(
-            tokio::time::timeout(deadline, work)
-                .await
-                .map_err(|_| {
-                    tool_err(ToolError::new(
-                        ErrorCode::EResourceLimit,
-                        "live policy read exceeded its deadline",
-                    ))
-                })?
+            cancel::unless_cancelled(&ct, waited)?
                 .map_err(internal_tool_err)?
                 .map_err(tool_err)?,
         ))
@@ -144,14 +148,20 @@ mod tests {
             RpcEndpointPolicy::from_csv("https://rpc.allowed.example").unwrap(),
             std::sync::Arc::new(sources),
             crate::tests::hosted().build_config,
+            crate::tool_limits::ToolLimitConfig::parse(60, None).unwrap(),
         )
+        .unwrap()
     }
 
     #[tokio::test]
     async fn actual_policy_route_refuses_an_operator_source_outside_hosted_allowlist() {
         let server = factory("https://rpc.other.example")().unwrap();
         assert_eq!(
-            refusal_code(server.check_against_policy(Parameters(request())).await),
+            refusal_code(
+                server
+                    .check_against_policy(Parameters(request()), Default::default())
+                    .await
+            ),
             "E_RPC"
         );
     }
@@ -170,13 +180,21 @@ mod tests {
             .unwrap();
         drop(first);
         assert_eq!(
-            refusal_code(second.check_against_policy(Parameters(request())).await),
+            refusal_code(
+                second
+                    .check_against_policy(Parameters(request()), Default::default())
+                    .await
+            ),
             "E_RESOURCE_LIMIT"
         );
         drop(running);
         // The control reaches the malformed spec, proving the busy result was the slot.
         assert_eq!(
-            refusal_code(second.check_against_policy(Parameters(request())).await),
+            refusal_code(
+                second
+                    .check_against_policy(Parameters(request()), Default::default())
+                    .await
+            ),
             "E_SPEC_INVALID"
         );
         assert_eq!(

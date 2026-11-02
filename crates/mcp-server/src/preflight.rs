@@ -5,9 +5,9 @@ use rmcp::model::CallToolResult;
 use rmcp::{tool, tool_router};
 
 use ozpb_api_types::{ErrorCode, PreflightTransactionInput, PreflightTransactionOutput, ToolError};
-use ozpb_source_rpc::HttpTransport;
+use tokio_util::sync::CancellationToken;
 
-use crate::{internal_tool_err, rpc_tool_err, tool_err, PolicyBuilderServer};
+use crate::{cancel, internal_tool_err, rpc_tool_err, tool_err, PolicyBuilderServer};
 
 /// Why a hosted server takes no signed material. The server never holds anything that can
 /// authorize on a user's account (architecture §6.2), and confidential simulation belongs on
@@ -45,6 +45,7 @@ impl PolicyBuilderServer {
     async fn preflight_transaction(
         &self,
         Parameters(input): Parameters<PreflightTransactionInput>,
+        ct: CancellationToken,
     ) -> Result<Json<PreflightTransactionOutput>, CallToolResult> {
         let rpc_url = self.authorized_rpc_url(&input.rpc_url).map_err(tool_err)?;
         // Only a hosted server has an endpoint policy; a stdio server runs in the caller's own
@@ -58,8 +59,9 @@ impl PolicyBuilderServer {
                 HOSTED_SIGNED_REFUSAL,
             )));
         }
+        let request = ct.clone();
         let observation = tokio::task::spawn_blocking(move || {
-            let transport = HttpTransport::new(rpc_url);
+            let transport = cancel::transport(rpc_url, &request);
             ozpb_source_rpc::preflight_transaction(
                 &transport,
                 &input.network_passphrase,
@@ -68,8 +70,8 @@ impl PolicyBuilderServer {
             .map_err(rpc_tool_err)
         })
         .await
-        .map_err(internal_tool_err)?
-        .map_err(tool_err)?;
+        .map_err(internal_tool_err)?;
+        let observation = cancel::unless_cancelled(&ct, observation.map_err(tool_err))?;
         Ok(Json(ozpb_toolkit::preflight_transaction_output(
             observation,
         )))
@@ -92,11 +94,14 @@ mod tests {
             ozpb_toolkit::BuildConfig::default(),
         );
         let error = server
-            .preflight_transaction(Parameters(PreflightTransactionInput {
-                rpc_url: "https://rpc.unapproved.example".to_string(),
-                network_passphrase: "Test SDF Network ; September 2015".to_string(),
-                envelope_xdr_base64: "not-base64".to_string(),
-            }))
+            .preflight_transaction(
+                Parameters(PreflightTransactionInput {
+                    rpc_url: "https://rpc.unapproved.example".to_string(),
+                    network_passphrase: "Test SDF Network ; September 2015".to_string(),
+                    envelope_xdr_base64: "not-base64".to_string(),
+                }),
+                Default::default(),
+            )
             .await;
         let error = match error {
             Ok(_) => panic!("hosted endpoint policy must run before RPC acquisition"),
@@ -153,11 +158,14 @@ mod tests {
             ozpb_toolkit::BuildConfig::default(),
         );
         let result = server
-            .preflight_transaction(Parameters(PreflightTransactionInput {
-                rpc_url: "https://rpc.allowed.example".to_string(),
-                network_passphrase: "Test SDF Network ; September 2015".to_string(),
-                envelope_xdr_base64: signed_envelope(),
-            }))
+            .preflight_transaction(
+                Parameters(PreflightTransactionInput {
+                    rpc_url: "https://rpc.allowed.example".to_string(),
+                    network_passphrase: "Test SDF Network ; September 2015".to_string(),
+                    envelope_xdr_base64: signed_envelope(),
+                }),
+                Default::default(),
+            )
             .await;
         let error = match result {
             Ok(_) => panic!("a hosted server must not accept signed material"),

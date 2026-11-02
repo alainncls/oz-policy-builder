@@ -580,6 +580,13 @@ pub fn native_expectation(
         .iter()
         .map(|case| case.context.current_ledger.0)
         .collect();
+    if preparation
+        .reference_case_ledgers
+        .as_ref()
+        .is_some_and(|ledgers| ledgers != &case_ledgers)
+    {
+        return Err("reference case ledgers differ from the derived suite");
+    }
     let original_ledger = suite
         .iter()
         .find(|case| case.class == MutationClass::Original)
@@ -1066,6 +1073,10 @@ fn native_layer(
         return fail("preparation_expectations_unavailable");
     };
     if bound_to_preparation(preparation, &expectation.binding, expectation).is_err()
+        || preparation
+            .reference_case_ledgers
+            .as_ref()
+            .is_some_and(|ledgers| ledgers != &expectation.case_ledgers)
         || expectation.binding.suite_hash != preparation.binding.suite_hash
         || offline_execution_network_id(&expectation.binding).as_deref()
             != Ok(expectation.execution_network_id.as_str())
@@ -1503,6 +1514,7 @@ pub fn assemble_dry_run_report(
         binding: preparation.binding.clone(),
         artifact_verification: preparation.artifact_verification.clone(),
         reference_report: preparation.reference_report.clone(),
+        reference_case_ledgers: preparation.reference_case_ledgers.clone(),
         layers,
         complete: false,
         acceptance: Some(DryRunAcceptance {

@@ -95,6 +95,10 @@ error_codes! {
     /// Every build slot on a hosted server is in use. Retryable by design: the same request
     /// can succeed once a running build finishes.
     EBuildBusy => "E_BUILD_BUSY",
+    /// The caller cancelled the request (or its session ended) and the server stopped the
+    /// work: a build was terminated or a read stopped before its next RPC call. MCP sends the
+    /// cancelling client no response, so this is the outcome's name, not a wire answer to it.
+    ECancelled => "E_CANCELLED",
     // registry
     ERegistrySignature => "E_REGISTRY_SIGNATURE",
     ERegistryRollback => "E_REGISTRY_ROLLBACK",
@@ -183,12 +187,20 @@ impl std::error::Error for ToolError {}
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RecordTransactionInput {
-    /// Network passphrase (e.g. "Test SDF Network ; September 2015").
-    pub network_passphrase: String,
     /// Transaction hash (64 hex chars).
     pub tx_hash: String,
-    /// RPC endpoint URL. On the hosted service this must be an allowlisted endpoint.
-    pub rpc_url: String,
+    /// Name of an RPC source the server's operator configured. Omit both this and `rpc_url`
+    /// when the server has exactly one source: it is used.
+    #[serde(default)]
+    pub rpc_source: Option<String>,
+    /// Another RPC endpoint URL instead of a configured source; requires
+    /// `network_passphrase`. On the hosted service this must be an allowlisted endpoint.
+    #[serde(default)]
+    pub rpc_url: Option<String>,
+    /// Network passphrase (e.g. "Test SDF Network ; September 2015"). Taken from the source
+    /// when one is used; if given as well, it must be that source's network.
+    #[serde(default)]
+    pub network_passphrase: Option<String>,
     #[serde(default)]
     pub operation_index: Option<u32>,
     #[serde(default)]
@@ -198,10 +210,16 @@ pub struct RecordTransactionInput {
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RecordSimulationInput {
-    pub network_passphrase: String,
     /// Unsigned transaction envelope, base64 XDR. Confidential input (§6.5).
     pub envelope_xdr_base64: String,
-    pub rpc_url: String,
+    /// As for `record_transaction`: a configured source by name, or the only one when omitted.
+    #[serde(default)]
+    pub rpc_source: Option<String>,
+    /// As for `record_transaction`: another endpoint, with `network_passphrase`.
+    #[serde(default)]
+    pub rpc_url: Option<String>,
+    #[serde(default)]
+    pub network_passphrase: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]

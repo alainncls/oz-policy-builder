@@ -2,7 +2,9 @@
 
 This package runs the versioned MCP endpoint for **one operator and trusted clients**. It
 works on a Linux Docker host independently of any hosting provider. It does not provision
-cloud infrastructure, publish an image, or establish that an endpoint has been deployed.
+cloud infrastructure or establish that an endpoint has been deployed. Releases made after the
+publishing workflow was added also publish images; see
+[Build the reviewed revision](#build-the-reviewed-revision).
 
 The hosted testnet deliverable means running the MCP tools behind an authenticated HTTPS
 address for authorized remote clients. It is not a wallet or a Stellar validator/RPC node:
@@ -10,12 +12,17 @@ it records, synthesizes, builds and verifies policies through operator-allowed t
 sources. User signing and installation approval remain in the wallet. A working local image
 or this guide alone does not establish that the hosted service is running.
 
+For a reference deployment offered during a testnet review, publish its access window and
+shutdown condition alongside its HTTPS address. Keep the self-hostable image and instructions
+available for use after that window. A temporary testnet instance is not evidence of a
+production endpoint or an ongoing availability commitment.
+
 Use the disposable-worker mode below when preparing the hosted testnet deployment. Choosing
 its hosting provider is an operational decision, not a separate milestone requirement.
 Present the actual account, hostname/TLS plan, image digest, client access boundary, cost,
-budget alert and stop condition before creating paid resources. Production availability and
-mainnet operation belong to Tranche 3; the testnet deployment still needs its own security
-and operational acceptance checks.
+budget alert and stop condition before creating paid resources. Tranche 3 delivers a production
+versioned release that operators run themselves; Gateway operates no production service. The
+testnet deployment still needs its own security and operational acceptance checks.
 
 **The API and compiler still share a trust domain.** Container resource limits, Cargo's
 offline setting and environment filtering are useful bounds, but they do not isolate each
@@ -55,7 +62,21 @@ Wasm build inputs; Stellar downloads are checked by SHA-256. OS packages resolve
 image construction, so an image build is not claimed byte-reproducible. Record the resulting
 image digest, source revision, package inventory and test result. When publishing through
 your own registry, deploy the resulting immutable `repository@sha256:…` reference rather
-than a mutable tag. The supplied workflow builds and tests locally in CI; it never pushes.
+than a mutable tag. `self-hosted.yml` builds and tests in CI and never pushes.
+
+For each published GitHub Release whose tag (`v` plus the workspace version in `Cargo.toml`)
+contains it, `publish-image.yml` builds both images for amd64 and arm64 from the release tag,
+runs every check `self-hosted.yml` runs on each, and publishes them to
+`ghcr.io/gateway-fm/oz-policy-builder` and `ghcr.io/gateway-fm/oz-policy-builder-proxy` under
+the release tag, with a GitHub build-provenance attestation. The workflow summary lists both
+`@sha256` references; use those, and check them with
+`gh attestation verify oci://<reference> --repo gateway-fm/oz-policy-builder`. A published
+image is software for operators to run; it does not mean an endpoint is running.
+
+GHCR creates a new package as private. After the first publication an organization owner makes
+both packages public once, under the package's settings; GitHub does not allow making a public
+package private again. Until then, pulls and attestation checks from outside the organization
+are refused. `v0.1.0` predates the workflow and has no images.
 
 ## Configure the operator boundary
 
@@ -68,7 +89,7 @@ directory. The directory must contain these files:
 | `bearer-token` | A newly generated 32–128-character URL-safe token; shared only with the trusted clients. |
 | `registry-roots.json` | The registry roots the operator trusts. |
 | `registry.signed.json` | A signed snapshot accepted by those roots and the minimum version. |
-| `rpc-sources.json` | Named sources, such as `{"testnet":{"rpc_url":"https://rpc-testnet.stellar.org","network_passphrase":"Test SDF Network ; September 2015"}}`. |
+| `rpc-sources.json` | Named sources, such as `{"testnet":{"rpc_url":"https://soroban-testnet.stellar.org","network_passphrase":"Test SDF Network ; September 2015"}}`. |
 | `tls.crt`, `tls.key` | A certificate and its private key for `OZPB_HOSTNAME`. Only the proxy receives them. |
 
 Keep the parent directory mode `0700`; make the individual mounted files readable by
@@ -140,9 +161,12 @@ tracing, body logging, crash uploads or request analytics. This reduces diagnost
 operator investigating startup failure should reproduce with synthetic input in an isolated
 environment and review any output before retaining it.
 
-Request data is processed in memory and temporary files. Build artifacts and cache data can
-remain in tmpfs until container removal; there is no configured backup or durable request
-storage. Deletion means removing both containers and their tmpfs, and removing any operator
+Request data is processed in memory and temporary files. Each MCP session also retains up to
+eight generated artifacts in memory for verification by reference. This is a count limit,
+not a one-megabyte cap. References are confined to that session and backend instance and are
+lost when the session ends or the server restarts; route an existing session to the same
+backend. Build artifacts and cache data can remain in tmpfs until container removal; there
+is no configured backup or durable request storage. Deletion means removing both containers and their tmpfs, and removing any operator
 exports separately. Host swap, host crash dumps and external proxy/monitoring retention are
 the host operator's responsibility. Treat unsigned simulations and generated source as
 confidential, and offer local stdio processing for material that should never leave a client.

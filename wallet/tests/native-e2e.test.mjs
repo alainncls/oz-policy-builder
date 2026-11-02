@@ -80,3 +80,13 @@ test('the actual worker preparation is refused for another proposed rule ID', { 
     expected: { ...run.expected, candidateContextRuleId: 4 }, reference: run.reference, maxCalls: run.maxCalls,
     signer: offlineCapability({ publicKey: () => delegate.publicKey(), sign: () => assert.fail('no signature before preparation matches'), verify: (b, s) => delegate.verify(b, s) }) }), /refused/);
 });
+
+test('the actual worker report is refused when a boundary ledger differs from the CLI suite', { skip }, async () => {
+  const run = await prepared();
+  const caseLedgers = [...run.reference.caseLedgers];
+  assert.equal(caseLedgers.length, run.reference.outcomes.length);
+  caseLedgers[1] = caseLedgers[1] === 0 ? 1 : caseLedgers[1] - 1;
+  await assert.rejects(() => runAccountExecution({ executable: runtime, jobText: run.jobText, expected: run.expected,
+    reference: { ...run.reference, caseLedgers }, maxCalls: run.maxCalls,
+    signer: offlineCapability(delegate) }), /refused/);
+});

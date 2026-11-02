@@ -14,9 +14,10 @@ use ozpb_api_types::{
     CheckPolicyCallSurfaceOutput, ErrorCode, PrepareInstallIntentInput, PrepareInstallIntentOutput,
     ToolError,
 };
-use ozpb_source_rpc::{scan_authority_state, HttpTransport};
+use ozpb_source_rpc::{scan_authority_state, RpcTransport};
+use tokio_util::sync::CancellationToken;
 
-use crate::{internal_tool_err, tool_err, PolicyBuilderServer};
+use crate::{cancel, internal_tool_err, tool_err, PolicyBuilderServer};
 
 /// How long a caller waits for the read itself, on top of one build timeout per spec rule with
 /// a generated policy (each is rebuilt to be recognized).
@@ -57,10 +58,13 @@ impl PolicyBuilderServer {
     async fn assemble_install_transaction(
         &self,
         Parameters(input): Parameters<AssembleInstallTransactionInput>,
+        ct: CancellationToken,
     ) -> Result<Json<AssembleInstallTransactionOutput>, CallToolResult> {
         let (trust, source, rpc_url, deadline, slot) =
             self.authority_setup(&input.intent_request, 0)?;
-        let build_config = self.build_config.clone();
+        let work_ct = ct.child_token();
+        let build_config = cancel::build_config(&self.build_config, &work_ct);
+        let reads = work_ct.clone();
         let work = tokio::task::spawn_blocking(move || {
             let _slot = slot;
             let plan = ozpb_toolkit::plan_install_intent_read(
@@ -68,7 +72,7 @@ impl PolicyBuilderServer {
                 &trust,
                 &build_config,
             )?;
-            let scan = read(&plan, &source, rpc_url.clone())?;
+            let scan = read(&plan, &source, &cancel::transport(rpc_url.clone(), &reads))?;
             let intent = ozpb_toolkit::prepare_install_intent_from_scan(
                 &plan,
                 &input.intent_request.rpc_source,
@@ -76,14 +80,14 @@ impl PolicyBuilderServer {
             )?;
             let request = ozpb_toolkit::install_assembly_request(&input, &intent)?;
             let observed = ozpb_source_rpc::assemble_install_transaction(
-                &HttpTransport::new(rpc_url),
+                &cancel::transport(rpc_url, &reads),
                 &source.network_passphrase,
                 &request,
             )
             .map_err(crate::rpc_tool_err)?;
             ozpb_toolkit::install_assembly_output(&input, intent, observed)
         });
-        Ok(Json(finish(work, deadline).await?))
+        Ok(Json(finish(work, deadline, &ct, &work_ct).await?))
     }
 
     /// Read who can change the account or reset the policies being installed.
@@ -111,16 +115,19 @@ impl PolicyBuilderServer {
     async fn check_policy_call_surface(
         &self,
         Parameters(input): Parameters<CheckPolicyCallSurfaceInput>,
+        ct: CancellationToken,
     ) -> Result<Json<CheckPolicyCallSurfaceOutput>, CallToolResult> {
         let (trust, source, rpc_url, deadline, slot) = self.authority_setup(&input, 0)?;
-        let build_config = self.build_config.clone();
+        let work_ct = ct.child_token();
+        let build_config = cancel::build_config(&self.build_config, &work_ct);
+        let reads = work_ct.clone();
         let work = tokio::task::spawn_blocking(move || {
             let _slot = slot;
             let plan = ozpb_toolkit::plan_call_surface_read(&input, &trust, &build_config)?;
-            let scan = read(&plan, &source, rpc_url)?;
+            let scan = read(&plan, &source, &cancel::transport(rpc_url, &reads))?;
             ozpb_toolkit::finish_call_surface_check(&plan, &input.rpc_source, &scan)
         });
-        Ok(Json(finish(work, deadline).await?))
+        Ok(Json(finish(work, deadline, &ct, &work_ct).await?))
     }
 
     /// The exact install arguments, only for an answer that clears.
@@ -145,16 +152,19 @@ impl PolicyBuilderServer {
     async fn prepare_install_intent(
         &self,
         Parameters(input): Parameters<PrepareInstallIntentInput>,
+        ct: CancellationToken,
     ) -> Result<Json<PrepareInstallIntentOutput>, CallToolResult> {
         let (trust, source, rpc_url, deadline, slot) = self.authority_setup(&input, 0)?;
-        let build_config = self.build_config.clone();
+        let work_ct = ct.child_token();
+        let build_config = cancel::build_config(&self.build_config, &work_ct);
+        let reads = work_ct.clone();
         let work = tokio::task::spawn_blocking(move || {
             let _slot = slot;
             let plan = ozpb_toolkit::plan_install_intent_read(&input, &trust, &build_config)?;
-            let scan = read(&plan, &source, rpc_url)?;
+            let scan = read(&plan, &source, &cancel::transport(rpc_url, &reads))?;
             ozpb_toolkit::prepare_install_intent_from_scan(&plan, &input.rpc_source, &scan)
         });
-        Ok(Json(finish(work, deadline).await?))
+        Ok(Json(finish(work, deadline, &ct, &work_ct).await?))
     }
 }
 
@@ -229,11 +239,10 @@ impl PolicyBuilderServer {
 fn read(
     plan: &ozpb_toolkit::CallSurfaceReadPlan,
     source: &ozpb_toolkit::RpcSource,
-    rpc_url: String,
+    transport: &impl RpcTransport,
 ) -> Result<ozpb_source_rpc::AccountStateScan, ToolError> {
-    let transport = HttpTransport::new(rpc_url);
     scan_authority_state(
-        &transport,
+        transport,
         &source.network_passphrase,
         &plan.account_address,
         &plan.contract_addresses,
@@ -243,15 +252,20 @@ fn read(
     .map_err(|error| ozpb_toolkit::scan_tool_error(&error))
 }
 
-/// Wait for blocking work up to the deadline. A blocking read cannot be cancelled: the slot
-/// travels with the work and is released when it ends, not when the caller stops waiting.
+/// Wait for blocking work up to the deadline. The slot travels with the work and is released
+/// when it ends; cancelling `work_ct` makes it end at its next build poll or RPC call, both
+/// when the caller cancels (`ct`) and when the deadline passes.
 async fn finish<T: Send + 'static>(
     work: tokio::task::JoinHandle<Result<T, ToolError>>,
     deadline: std::time::Duration,
+    ct: &CancellationToken,
+    work_ct: &CancellationToken,
 ) -> Result<T, CallToolResult> {
-    tokio::time::timeout(deadline, work)
-        .await
+    let waited = tokio::time::timeout(deadline, work).await;
+    cancel::unless_cancelled(ct, Ok(()))?;
+    waited
         .map_err(|_| {
+            work_ct.cancel();
             tool_err(ToolError::new(
                 ErrorCode::EResourceLimit,
                 format!(
@@ -267,6 +281,7 @@ async fn finish<T: Send + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ozpb_source_rpc::HttpTransport;
     use std::io::{BufRead, BufReader, Read, Write};
 
     #[test]

@@ -91,6 +91,7 @@ fn preparation(denials: usize) -> DryRunOutput {
             unmodeled_reviewed_policies: Vec::new(),
             matches: true,
         },
+        reference_case_ledgers: Some(vec![1000; report.outcomes.len()]),
         reference_report: serde_json::to_value(report).unwrap(),
         layers: vec![
             DryRunLayer {
@@ -725,7 +726,8 @@ fn native_scope_refuses_every_bound_the_worker_refuses() {
 
 #[test]
 fn native_results_cannot_swap_valid_execution_ledgers_between_cases() {
-    let prep = preparation(5);
+    let mut prep = preparation(5);
+    prep.reference_case_ledgers.as_mut().unwrap()[1] = 1001;
     let mut native = expectation(&prep);
     native.case_ledgers[1] = 1001;
     native.signature_expiration_ledgers.insert(1065);
@@ -784,4 +786,46 @@ fn native_refusals_match_shared_wallet_vectors() {
             }
         }
     }
+}
+
+#[test]
+fn assembled_reports_preserve_case_ledgers_and_legacy_reports_remain_readable() {
+    let prep = preparation(6);
+    let native = expectation(&prep);
+    let report = assemble(&prep, &native, ran(&native, worker_result(&prep, &native)));
+    assert_eq!(report.reference_case_ledgers, prep.reference_case_ledgers);
+    let mut json = serde_json::to_value(&prep).unwrap();
+    json.as_object_mut()
+        .unwrap()
+        .remove("reference_case_ledgers");
+    let legacy: DryRunOutput = serde_json::from_value(json).unwrap();
+    assert!(legacy.reference_case_ledgers.is_none());
+}
+
+#[test]
+fn assembled_native_reports_reject_mismatched_case_metadata_but_accept_legacy_absence() {
+    let prep = preparation(5);
+    let native = expectation(&prep);
+    for ledgers in [vec![1001; 6], vec![1000; 5], vec![]] {
+        let mut changed = prep.clone();
+        changed.reference_case_ledgers = Some(ledgers);
+        let report = assemble(
+            &changed,
+            &native,
+            ran(&native, worker_result(&prep, &native)),
+        );
+        assert_eq!(layer_of(&report, Layer::AccountWasm).status, Status::Failed);
+        assert_eq!(
+            layer_of(&report, Layer::AccountWasm).reason,
+            "expectation_not_bound_to_preparation"
+        );
+    }
+    let mut legacy = prep.clone();
+    legacy.reference_case_ledgers = None;
+    let report = assemble(
+        &legacy,
+        &native,
+        ran(&native, worker_result(&prep, &native)),
+    );
+    assert_eq!(layer_of(&report, Layer::AccountWasm).status, Status::Passed);
 }

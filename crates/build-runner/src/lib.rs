@@ -166,6 +166,9 @@ pub struct BuildConfig {
     /// default, leaves it unbounded: the CLI runs one build per process, and a stdio server
     /// serves one caller. A hosted server sets it, because each of its sessions holds a clone.
     pub slots: Option<BuildSlots>,
+    /// The requesting caller's cancellation. `None`, the default, builds until completion or
+    /// timeout. Set per request on a clone of the operator's configuration, never shared.
+    pub cancel: Option<BuildCancel>,
 }
 
 /// A fail-fast bound on concurrent builds. Clones share one count, so every holder of a cloned
@@ -224,6 +227,33 @@ impl Drop for BuildSlot {
     }
 }
 
+/// How often a running build checks [`BuildCancel`]. Only a build that has a cancel hook polls;
+/// without one the build waits on its timeout alone, as it always has.
+const CANCEL_POLL: Duration = Duration::from_millis(100);
+
+/// The caller's cancellation, polled while a build runs. A hosted server sets one per request
+/// so that a client's cancellation (or its session ending) stops the build and frees its slot
+/// instead of compiling on for the rest of the timeout. A predicate rather than a token type,
+/// so this crate stays independent of the server's async runtime.
+#[derive(Clone)]
+pub struct BuildCancel(std::sync::Arc<dyn Fn() -> bool + Send + Sync>);
+
+impl BuildCancel {
+    pub fn new(is_cancelled: impl Fn() -> bool + Send + Sync + 'static) -> Self {
+        Self(std::sync::Arc::new(is_cancelled))
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        (self.0)()
+    }
+}
+
+impl std::fmt::Debug for BuildCancel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BuildCancel")
+    }
+}
+
 impl Default for BuildConfig {
     fn default() -> Self {
         Self {
@@ -237,6 +267,7 @@ impl Default for BuildConfig {
             jobs: default_jobs(),
             builder: Builder::Local,
             slots: None,
+            cancel: None,
         }
     }
 }
@@ -455,6 +486,9 @@ pub enum BuildError {
     /// running build finishes.
     #[error("E_BUILD_BUSY: every build slot on this server is in use; retry when a running build finishes")]
     Busy,
+    /// The caller cancelled the request; the build was stopped and produced nothing.
+    #[error("E_CANCELLED: the request was cancelled and its build stopped")]
+    Cancelled,
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -901,7 +935,7 @@ fn build_local(
         &output_dir,
         &target_dir,
     );
-    let output = run_bounded(command, config.timeout)?;
+    let output = run_bounded_until(command, config.timeout, config.cancel.as_ref())?;
     if !output.status.success() {
         return Err(BuildError::Failed(format!(
             "stellar contract build exited with {}; output: {}",
@@ -1083,7 +1117,42 @@ fn terminate_process_group(child: &mut std::process::Child) -> Result<(), BuildE
         .map_err(|error| BuildError::Internal(error.to_string()))
 }
 
-fn run_bounded(mut command: Command, timeout: Duration) -> Result<ProcessOutput, BuildError> {
+fn run_bounded(command: Command, timeout: Duration) -> Result<ProcessOutput, BuildError> {
+    run_bounded_until(command, timeout, None)
+}
+
+/// Wait for `child` until it exits, `timeout` passes, or `cancel` reports cancellation.
+/// `Ok(None)` means it is still running and must be terminated; the flag says whether
+/// cancellation, rather than the timeout, ended the wait.
+fn wait_until(
+    child: &mut std::process::Child,
+    timeout: Duration,
+    cancel: Option<&BuildCancel>,
+) -> (std::io::Result<Option<std::process::ExitStatus>>, bool) {
+    let Some(cancel) = cancel else {
+        return (child.wait_timeout(timeout), false);
+    };
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if cancel.is_cancelled() {
+            return (Ok(None), true);
+        }
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            return (Ok(None), false);
+        }
+        match child.wait_timeout(remaining.min(CANCEL_POLL)) {
+            Ok(None) => {}
+            other => return (other, false),
+        }
+    }
+}
+
+fn run_bounded_until(
+    mut command: Command,
+    timeout: Duration,
+    cancel: Option<&BuildCancel>,
+) -> Result<ProcessOutput, BuildError> {
     // Must happen before spawn: it makes the child its own process-group leader so the
     // timeout can reach its descendants without ever signalling our own group.
     #[cfg(unix)]
@@ -1116,8 +1185,8 @@ fn run_bounded(mut command: Command, timeout: Duration) -> Result<ProcessOutput,
         let _ = stderr_tx.send(read_bounded(stderr));
     });
 
-    let waited = child.wait_timeout(timeout);
-    // Terminate on timeout AND on a wait error: `wait_timeout` can fail before observing the
+    let (waited, cancelled) = wait_until(&mut child, timeout, cancel);
+    // Terminate on timeout, on cancellation AND on a wait error: `wait_timeout` can fail before observing the
     // child (it allocates a self-pipe), and leaving the group alive there would block the
     // caller for the build's natural lifetime with nothing bounding it.
     let kill_result = if matches!(waited, Ok(None) | Err(_)) {
@@ -1148,6 +1217,7 @@ fn run_bounded(mut command: Command, timeout: Duration) -> Result<ProcessOutput,
 
     let status = match waited.map_err(|error| BuildError::Internal(error.to_string()))? {
         Some(status) => status,
+        None if cancelled => return Err(BuildError::Cancelled),
         None => return Err(BuildError::Timeout),
     };
     let mut combined = stdout_bytes.clone();
@@ -2323,7 +2393,10 @@ mod tests {
         let pidfile = dir.path().join("grandchild.pid");
         let script = fixture_script(
             dir.path(),
-            &format!("sleep 30 &\necho $! > {}\nwait", pidfile.display()),
+            &format!(
+                "sleep 30 &\necho $! > {0}.tmp && mv {0}.tmp {0}\nwait",
+                pidfile.display()
+            ),
         );
 
         // Generous headroom so the fixture certainly reaches `echo` even under load; the
@@ -2381,6 +2454,60 @@ mod tests {
             "open descriptors grew {before} -> {after} across {ROUNDS} timeouts; the timeout \
              path returned without joining its reader threads, leaking each one's pipe end"
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn cancellation_kills_the_whole_process_group_and_reports_cancelled() {
+        let _guard = serialized();
+        let dir = tempfile::tempdir().unwrap();
+        let pidfile = dir.path().join("grandchild.pid");
+        let script = fixture_script(
+            dir.path(),
+            &format!(
+                "sleep 30 &\necho $! > {0}.tmp && mv {0}.tmp {0}\nwait",
+                pidfile.display()
+            ),
+        );
+        // The caller cancels as soon as the build has started its grandchild, long before the
+        // 30s timeout could end it.
+        let started_grandchild = pidfile.clone();
+        let cancel = BuildCancel::new(move || started_grandchild.exists());
+        let started = std::time::Instant::now();
+        assert_eq!(
+            run_bounded_until(piped(&script), Duration::from_secs(30), Some(&cancel)).unwrap_err(),
+            BuildError::Cancelled
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "cancellation waited {:?}; the build ran on toward its timeout",
+            started.elapsed()
+        );
+        let pid = std::fs::read_to_string(&pidfile)
+            .unwrap()
+            .trim()
+            .to_string();
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while pid_is_alive(&pid) && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(
+            !pid_is_alive(&pid),
+            "grandchild pid {pid} survived cancellation; only the direct child was stopped"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn an_uncancelled_build_with_a_cancel_hook_completes_normally() {
+        let _guard = serialized();
+        let dir = tempfile::tempdir().unwrap();
+        let script = fixture_script(dir.path(), "sleep 0.3\necho done");
+        let cancel = BuildCancel::new(|| false);
+        let output =
+            run_bounded_until(piped(&script), Duration::from_secs(10), Some(&cancel)).unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"done\n");
     }
 
     #[test]

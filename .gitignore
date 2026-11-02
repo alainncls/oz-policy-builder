@@ -1,4 +1,5 @@
 /target
+/execution-runtime/target
 contracts/**/target/
 **/*.rs.bk
 .DS_Store
@@ -21,3 +22,4 @@ testnet-harness/browser/out/
 # Demo run directories. `scripts/demo-tranche1.sh` writes its artifacts here so they survive
 # the run and can be read or sent to someone; they are per-run evidence, not source.
 demo-runs/
+__pycache__/

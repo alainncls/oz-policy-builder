@@ -373,7 +373,9 @@ pub struct AuthorityEntry {
 pub enum Reach {
     /// `Default`: every call the account authorizes, management and policies included.
     AnyCall,
-    /// `CallContract(account)`: the account's own management methods.
+    /// `CallContract(account)`: every method of the account itself. That is its management, and
+    /// for a wrapper with `execute`, any call the account makes on its own authority, policy
+    /// resets included; `upgrade` replaces its code.
     AccountCalls,
     /// `CallContract(bound policy)`: that policy's `install` / `uninstall` for this account,
     /// which resets its state.

@@ -30,19 +30,26 @@
 //! live again from the current ledger for the minimum persistent TTL. These are the SDK test
 //! defaults for TTL settings, not testnet's or mainnet's (`ttl.rs` gives both); the tests assert
 //! orderings and boundaries computed from the ledger, not network durations.
+//!
+//! **Management authority.** Every management method of the account, and its wrapper entry points
+//! `execute`, `upgrade` and `batch_add_signer`, requires only the account's own authorization. The
+//! tests call them under an account-address rule the agent's key alone satisfies, after checking
+//! that the call-surface check refuses that rule, to show what the refusal prevents. Through
+//! `execute` such a rule also reaches the policy, which accepts the account as its direct caller.
 
 #[path = "support/signed_auth.rs"]
 mod signed_auth;
 
 use ed25519_dalek::SigningKey;
 use ozpb_call_surface_core::{
-    check, AuthorityEntry, BoundPolicy, CheckInput, Enumeration, FindingCode, Grant, GrantPolicy,
-    GrantPolicyParams, Identity, PolicyRecognitionPath, PolicySignerSemantics, Reach, Requirement,
-    StoredContextType, StoredSignerKey, SurfaceVerdict, VerifiedPolicy,
+    check, AuthorityEntry, BoundPolicy, CheckInput, Enumeration, ExpiredRule, FindingCode, Grant,
+    GrantPolicy, GrantPolicyParams, Identity, PolicyRecognitionPath, PolicySignerSemantics, Reach,
+    Requirement, StoredContextType, StoredSignerKey, SurfaceVerdict, VerifiedPolicy,
 };
 use ozpb_domain::{pinned_upstream::OZ_SMART_ACCOUNT_WASM, Hash32};
 use ozpb_source_rpc::{
-    project_account_state, scan_authority_state, AccountScanBounds, RpcError, RpcTransport,
+    project_account_state, scan_authority_state, AccountScanBounds, AccountScanError,
+    AccountStateScan, RpcError, RpcTransport,
 };
 use ozpb_synthesizer::fixtures as fx;
 use serde_json::{json, Value};
@@ -55,8 +62,8 @@ use soroban_sdk::testutils::{
 };
 use soroban_sdk::xdr::{self as sdk_xdr, ReadXdr as _, ToXdr as _, WriteXdr as _};
 use soroban_sdk::{
-    vec as svec, Address, Bytes, Env, IntoVal, Map, String as SString, Symbol, TryFromVal, Val,
-    Vec as SVec,
+    vec as svec, Address, Bytes, BytesN, Env, IntoVal, Map, String as SString, Symbol, TryFromVal,
+    Val, Vec as SVec,
 };
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -74,13 +81,17 @@ const AMOUNT: i128 = 500_000_000;
 const START: u32 = 1_000;
 
 // Policy refusals (`PolicyError` in the generated contract).
+const PREDICATE_UNSATISFIED: u32 = 2;
+const SIGNER_SET_DIVERGED: u32 = 3;
 const CALL_COUNT_EXCEEDED: u32 = 7;
 const MISSING_STATE: u32 = 8;
 const RULE_EXPIRED: u32 = 9;
 const ALREADY_INSTALLED: u32 = 10;
-// The account's refusal when a rule is expired, scoped elsewhere, or lacks a signer
-// (`SmartAccountError::UnvalidatedContext`, stellar-accounts 0.7.2).
+// Account refusals (`SmartAccountError`, stellar-accounts 0.7.2).
+const CONTEXT_RULE_NOT_FOUND: u32 = 3000;
+/// A rule is expired, scoped elsewhere, or (policy-free) lacks a signer.
 const UNVALIDATED_CONTEXT: u32 = 3002;
+const PAST_VALID_UNTIL: u32 = 3005;
 
 /// What one transaction did, attributed to the contract that refused it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -384,6 +395,39 @@ fn claimed_rule(env: &Env, p: &Parties, id: u32) -> ContextRule {
         policy_ids: SVec::new(env),
         valid_until: Some(VALID_UNTIL),
     }
+}
+
+/// The arguments of the policy's `method` for the grant `target_rule`. An `enforce` claims the
+/// grant's own signer, rule and a transfer it permits; no transfer happens.
+fn policy_call_args(env: &Env, p: &Parties, method: Method, target_rule: u32) -> SVec<Val> {
+    let claimed = claimed_rule(env, p, target_rule).into_val(env);
+    let account = p.account.clone().into_val(env);
+    match method {
+        Method::Install => svec![env, 0u32.into_val(env), claimed, account],
+        Method::Enforce => svec![
+            env,
+            transfer_context(env, p).into_val(env),
+            svec![env, Signer::Delegated(p.of(env, Key::Agent))].into_val(env),
+            claimed,
+            account
+        ],
+        Method::Uninstall => svec![env, claimed, account],
+    }
+}
+
+/// The ledger key of the account's stored rule `id` (`ContextRuleData(id)`, stellar-accounts
+/// 0.7.2): the one entry the account reads to validate a context against that rule.
+fn rule_key(env: &Env, p: &Parties, id: u32) -> sdk_xdr::LedgerKey {
+    let key: SVec<Val> = svec![
+        env,
+        Symbol::new(env, "ContextRuleData").into_val(env),
+        id.into_val(env)
+    ];
+    sdk_xdr::LedgerKey::ContractData(sdk_xdr::LedgerKeyContractData {
+        contract: as_sc_address(env, &p.account),
+        key: scval(env, &key.into_val(env)),
+        durability: sdk_xdr::ContractDataDurability::Persistent,
+    })
 }
 
 /// The ledger key of one of the policy's persistent entries for (account, rule).
@@ -727,7 +771,18 @@ impl World {
         function: &str,
         args: impl FnOnce(&Env, &Parties) -> SVec<Val>,
     ) -> Outcome {
-        self.call(|p| p.account.clone(), function, args, 0, &[Key::Owner])
+        self.manage_as(function, args, 0, &[Key::Owner])
+    }
+
+    /// One of the account's methods, authorized under `rule` and signed by `keys`.
+    fn manage_as(
+        &mut self,
+        function: &str,
+        args: impl FnOnce(&Env, &Parties) -> SVec<Val>,
+        rule: u32,
+        keys: &[Key],
+    ) -> Outcome {
+        self.call(|p| p.account.clone(), function, args, rule, keys)
     }
 
     /// A direct call to the policy's `method` for the grant `target_rule`, authorized by the
@@ -748,20 +803,26 @@ impl World {
         self.call(
             policy,
             method.name(),
+            |env, p| policy_call_args(env, p, method, target_rule),
+            rule,
+            keys,
+        )
+    }
+
+    /// The same call to the policy, made by the account itself through its `execute` entry
+    /// point, which the account authorizes under `rule`. The policy then asks for the account's
+    /// authorization from inside a call the account made, so the host grants it to its direct
+    /// invoker without another `__check_auth`.
+    fn execute(&mut self, method: Method, rule: u32, keys: &[Key], target_rule: u32) -> Outcome {
+        self.manage_as(
+            "execute",
             |env, p| {
-                let claimed = claimed_rule(env, p, target_rule).into_val(env);
-                let account = p.account.clone().into_val(env);
-                match method {
-                    Method::Install => svec![env, 0u32.into_val(env), claimed, account],
-                    Method::Enforce => svec![
-                        env,
-                        transfer_context(env, p).into_val(env),
-                        svec![env, Signer::Delegated(p.of(env, Key::Agent))].into_val(env),
-                        claimed,
-                        account
-                    ],
-                    Method::Uninstall => svec![env, claimed, account],
-                }
+                svec![
+                    env,
+                    p.policy.clone().into_val(env),
+                    Symbol::new(env, method.name()).into_val(env),
+                    policy_call_args(env, p, method, target_rule).into_val(env)
+                ]
             },
             rule,
             keys,
@@ -771,6 +832,11 @@ impl World {
     /// The agent authorizes one transfer the grant permits, through the account's
     /// `__check_auth` under `rule`.
     fn grant_call(&mut self, rule: u32) -> Outcome {
+        self.grant_call_by(rule, Key::Agent)
+    }
+
+    /// `key` alone authorizes one transfer the grant permits under `rule`.
+    fn grant_call_by(&mut self, rule: u32, key: Key) -> Outcome {
         let tx = self.begin();
         let (env, p) = (&tx.env, &tx.p);
         self.next_payload += 1;
@@ -784,14 +850,14 @@ impl World {
         env.set_auths(&[signed_delegate_auth_until(
             env,
             &p.account,
-            &Key::Agent.signing_key(),
+            &key.signing_key(),
             &digest,
             nonce,
             env.ledger().sequence() + 100,
             Forgery::None,
         )]);
         let mut signers = Map::new(env);
-        signers.set(Signer::Delegated(p.of(env, Key::Agent)), Bytes::new(env));
+        signers.set(Signer::Delegated(p.of(env, key)), Bytes::new(env));
         let auth_payload: Val = AuthPayload {
             signers,
             context_rule_ids: rule_ids,
@@ -813,7 +879,7 @@ impl World {
     /// A read through a host whose writes are discarded, as a simulation would read.
     fn read<T: TryFromVal<Env, Val>>(
         &self,
-        policy: PolicyOf,
+        contract: PolicyOf,
         function: &str,
         args: impl FnOnce(&Env, &Parties) -> SVec<Val>,
     ) -> Result<T, Outcome> {
@@ -822,7 +888,7 @@ impl World {
         let args = args(env, p);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             env.try_invoke_contract::<T, soroban_sdk::Error>(
-                &policy(p),
+                &contract(p),
                 &Symbol::new(env, function),
                 args,
             )
@@ -866,6 +932,61 @@ impl World {
                 .expect("NextId is set")
         });
         next
+    }
+
+    /// The id the account's signer registry gives `key`, which `remove_signer` takes.
+    fn signer_id(&self, key: Key) -> u32 {
+        self.read(
+            |p| p.account.clone(),
+            "get_signer_id",
+            |env, p| svec![env, Signer::Delegated(p.of(env, key)).into_val(env)],
+        )
+        .expect("the signer is registered")
+    }
+
+    /// The id the account's policy registry gives the policy, which `remove_policy` takes.
+    fn policy_id(&self) -> u32 {
+        self.read(
+            |p| p.account.clone(),
+            "get_policy_id",
+            |env, p| svec![env, p.policy.clone().into_val(env)],
+        )
+        .expect("the policy is registered")
+    }
+
+    fn rule_key(&self, id: u32) -> sdk_xdr::LedgerKey {
+        let tx = self.begin();
+        rule_key(&tx.env, &tx.p, id)
+    }
+
+    fn account_instance_key(&self) -> sdk_xdr::LedgerKey {
+        let tx = self.begin();
+        sdk_xdr::LedgerKey::ContractData(sdk_xdr::LedgerKeyContractData {
+            contract: as_sc_address(&tx.env, &tx.p.account),
+            key: sdk_xdr::ScVal::LedgerKeyContractInstance,
+            durability: sdk_xdr::ContractDataDurability::Persistent,
+        })
+    }
+
+    /// The hash of the code the account's instance runs.
+    fn account_code(&self) -> [u8; 32] {
+        let key = self.account_instance_key();
+        let (_, (entry, _)) = self
+            .ledger
+            .ledger_entries
+            .iter()
+            .find(|(stored, _)| **stored == key)
+            .expect("the account instance exists");
+        let sdk_xdr::LedgerEntryData::ContractData(data) = &entry.data else {
+            panic!("the account instance is contract data");
+        };
+        let sdk_xdr::ScVal::ContractInstance(instance) = &data.val else {
+            panic!("the account instance holds a contract instance");
+        };
+        let sdk_xdr::ContractExecutable::Wasm(hash) = &instance.executable else {
+            panic!("the account runs Wasm");
+        };
+        hash.0
     }
 
     /// The grant's two policy entries: the installation marker and the call counter.
@@ -918,6 +1039,32 @@ impl World {
         }
     }
 
+    /// Run `transaction` as a submission does when its footprint holds archived entries
+    /// (Protocol 23 automatic restoration): it restores exactly the archived entries it touches
+    /// and then runs, at this ledger, with nothing in between. Which entries those are is found
+    /// by simulating it on copies of this world. Returns the restored keys and its result.
+    /// `transaction` must be one committed transaction: the archived keys are read from what
+    /// the last one recorded.
+    fn restoring<T>(
+        &mut self,
+        transaction: impl Fn(&mut World) -> T,
+    ) -> (Vec<sdk_xdr::LedgerKey>, T) {
+        let mut archived = Vec::new();
+        loop {
+            let mut simulation = self.clone();
+            simulation.restore(&archived);
+            simulation.refused.clear();
+            let _ = transaction(&mut simulation);
+            if simulation.refused.is_empty() {
+                break;
+            }
+            archived.extend(simulation.refused);
+        }
+        self.restore(&archived);
+        let result = transaction(self);
+        (archived, result)
+    }
+
     /// Every persistent entry one permitted grant call reads, from a copy of this world whose
     /// writes are discarded.
     fn entries_read_by_grant_call(&self, rule: u32) -> Vec<sdk_xdr::LedgerKey> {
@@ -940,19 +1087,22 @@ impl World {
             .collect()
     }
 
-    /// The call-surface core's answer for installing the grant on this account now, from the
-    /// committed ledger read the way the live check reads it.
-    fn surface(&self) -> SurfaceVerdict {
-        let rpc = LedgerRpc(&self.ledger);
-        let scan = scan_authority_state(
-            &rpc,
+    /// The live check's read of the account and the policy's code, over the committed ledger.
+    fn scan(&self) -> Result<AccountStateScan, AccountScanError> {
+        scan_authority_state(
+            &LedgerRpc(&self.ledger),
             PASSPHRASE,
             &self.account,
             std::slice::from_ref(&self.policy),
             &[Key::Agent.g_address()],
             AccountScanBounds::default(),
         )
-        .expect("account scan");
+    }
+
+    /// The call-surface core's answer for installing the grant on this account now, from the
+    /// committed ledger read the way the live check reads it.
+    fn surface(&self) -> SurfaceVerdict {
+        let scan = self.scan().expect("account scan");
         let projection = project_account_state(&scan).expect("projection");
         assert_eq!(scan.account_wasm_hash.0, OZ_SMART_ACCOUNT_WASM.0);
         let observed_policy = scan
@@ -1431,14 +1581,7 @@ fn grant_survives_inactivity_until_its_shortest_ttl() {
     // with, because nothing on this path extends them. The account extends its rule, signer and
     // policy entries when it reads them, and the policy extends its own entries, instance and
     // code to the compiled expiry (below the test ledger's maximum TTL).
-    let account_instance = {
-        let tx = w.begin();
-        sdk_xdr::LedgerKey::ContractData(sdk_xdr::LedgerKeyContractData {
-            contract: as_sc_address(&tx.env, &tx.p.account),
-            key: sdk_xdr::ScVal::LedgerKeyContractInstance,
-            durability: sdk_xdr::ContractDataDurability::Persistent,
-        })
-    };
+    let account_instance = w.account_instance_key();
     let account_code = sdk_xdr::LedgerKey::ContractCode(sdk_xdr::LedgerKeyContractCode {
         hash: sdk_xdr::Hash(OZ_SMART_ACCOUNT_WASM.0),
     });
@@ -1663,4 +1806,582 @@ fn overlapping_real_account_grants_have_independent_caps() {
         Ok(0),
         "removal cannot refresh the other grant's cap"
     );
+}
+
+#[test]
+#[ignore = "requires the pinned account and generated policy Wasm; run scripts/test-pinned-account-authorization.sh"]
+fn weak_account_rule_cannot_widen_the_grant_signers_but_can_strip_its_policy() {
+    let mut w = World::new();
+    let management = w
+        .add_rule(Scope::Account, &[Key::Agent], &[], None)
+        .expect("owner creates weak management authority");
+    assert_eq!(
+        refusals(&w.surface()),
+        vec![(FindingCode::DelegateHasAuthority, Some(management))]
+    );
+    // Deliberately bypass the refusal to demonstrate the authority it protects.
+    let grant = w.install_grant().expect("owner installs anyway");
+    assert_eq!(w.grant_call(grant), Outcome::Permitted);
+    assert_eq!(w.remaining(grant), Ok(MAX_CALLS - 1));
+
+    // The agent alone adds another key to the grant. With a policy on the rule the account
+    // defers signers to it, and the generated policy refuses any signer set but the compiled
+    // one: the grant fails closed for the agent, and the added key cannot use it either.
+    assert_eq!(
+        w.manage_as(
+            "add_signer",
+            |env, p| svec![
+                env,
+                grant.into_val(env),
+                Signer::Delegated(p.of(env, Key::Third)).into_val(env)
+            ],
+            management,
+            &[Key::Agent],
+        ),
+        Outcome::Permitted
+    );
+    assert_eq!(w.grant_call(grant), Outcome::Policy(SIGNER_SET_DIVERGED));
+    assert_eq!(
+        w.grant_call_by(grant, Key::Third),
+        Outcome::Policy(PREDICATE_UNSATISFIED)
+    );
+    assert_eq!(w.remaining(grant), Ok(MAX_CALLS - 1));
+    let third = w.signer_id(Key::Third);
+    assert_eq!(
+        w.manage_as(
+            "remove_signer",
+            |env, _| svec![env, grant.into_val(env), third.into_val(env)],
+            management,
+            &[Key::Agent],
+        ),
+        Outcome::Permitted
+    );
+    assert_eq!(w.grant_call(grant), Outcome::Permitted);
+    assert_eq!(
+        w.remaining(grant),
+        Ok(MAX_CALLS - 2),
+        "the count continues once the compiled signer set is back"
+    );
+
+    // Removing the policy instead uninstalls it and leaves an unlimited agent rule on the target.
+    for _ in 2..MAX_CALLS {
+        assert_eq!(w.grant_call(grant), Outcome::Permitted);
+    }
+    assert_eq!(w.grant_call(grant), Outcome::Policy(CALL_COUNT_EXCEEDED));
+    let policy = w.policy_id();
+    assert_eq!(
+        w.manage_as(
+            "remove_policy",
+            |env, _| svec![env, grant.into_val(env), policy.into_val(env)],
+            management,
+            &[Key::Agent],
+        ),
+        Outcome::Permitted,
+        "the agent alone strips the grant's policy"
+    );
+    assert!(!w.is_installed(grant));
+    assert_eq!(w.remaining(grant), Err(Outcome::Policy(MISSING_STATE)));
+    for _ in 0..=MAX_CALLS {
+        assert_eq!(w.grant_call(grant), Outcome::Permitted, "past the cap");
+    }
+}
+
+#[test]
+#[ignore = "requires the pinned account and generated policy Wasm; run scripts/test-pinned-account-authorization.sh"]
+fn weak_account_rule_can_take_over_a_protected_rule_by_adding_its_signer() {
+    let mut w = World::new();
+    let reset = w
+        .add_rule(Scope::Policy, &[Key::Third], &[], None)
+        .expect("a policy-address rule held by another key");
+    let management = w
+        .add_rule(Scope::Account, &[Key::Agent], &[], None)
+        .expect("owner creates weak management authority");
+    let reset_entry = |verdict: &SurfaceVerdict| {
+        authority(verdict)
+            .into_iter()
+            .find(|(rule, ..)| *rule == reset)
+    };
+    let policy_reach = Reach::Policy {
+        address: w.policy.clone(),
+    };
+    let verdict = w.surface();
+    assert_eq!(
+        refusals(&verdict),
+        vec![(FindingCode::DelegateHasAuthority, Some(management))]
+    );
+    assert_eq!(
+        reset_entry(&verdict),
+        Some((reset, policy_reach.clone(), vec![Key::Third.g_address()]))
+    );
+    // Deliberately bypass the refusal to demonstrate the authority it protects.
+    let grant = w.install_grant().expect("owner installs anyway");
+    for _ in 0..2 {
+        assert_eq!(w.grant_call(grant), Outcome::Permitted);
+    }
+    assert_eq!(
+        w.direct(Method::Uninstall, reset, &[Key::Agent], grant),
+        Outcome::Account(UNVALIDATED_CONTEXT)
+    );
+
+    // The agent alone adds its key to the protected rule. Every signer of a policy-free rule
+    // must sign, so it still cannot use the rule alone, and the check lists both signers
+    // without refusing the rule.
+    assert_eq!(
+        w.manage_as(
+            "add_signer",
+            |env, p| svec![
+                env,
+                reset.into_val(env),
+                Signer::Delegated(p.of(env, Key::Agent)).into_val(env)
+            ],
+            management,
+            &[Key::Agent],
+        ),
+        Outcome::Permitted
+    );
+    let verdict = w.surface();
+    assert_eq!(
+        refusals(&verdict),
+        vec![
+            (FindingCode::DelegateHasAuthority, Some(management)),
+            (FindingCode::DelegateGrantOverlap, Some(grant)),
+        ]
+    );
+    assert_eq!(
+        reset_entry(&verdict),
+        Some((
+            reset,
+            policy_reach.clone(),
+            vec![Key::Third.g_address(), Key::Agent.g_address()]
+        ))
+    );
+    assert_eq!(
+        w.direct(Method::Uninstall, reset, &[Key::Agent], grant),
+        Outcome::Account(UNVALIDATED_CONTEXT)
+    );
+    assert_eq!(w.remaining(grant), Ok(MAX_CALLS - 2));
+
+    // Then it removes the other signer, and the rule is the agent's alone.
+    let third = w.signer_id(Key::Third);
+    assert_eq!(
+        w.manage_as(
+            "remove_signer",
+            |env, _| svec![env, reset.into_val(env), third.into_val(env)],
+            management,
+            &[Key::Agent],
+        ),
+        Outcome::Permitted
+    );
+    let verdict = w.surface();
+    assert_eq!(
+        refusals(&verdict),
+        vec![
+            (FindingCode::DelegateHasAuthority, Some(reset)),
+            (FindingCode::DelegateHasAuthority, Some(management)),
+            (FindingCode::DelegateGrantOverlap, Some(grant)),
+        ]
+    );
+    assert_eq!(
+        w.direct(Method::Uninstall, reset, &[Key::Third], grant),
+        Outcome::Account(UNVALIDATED_CONTEXT),
+        "the original holder is locked out"
+    );
+    assert_eq!(
+        w.direct(Method::Uninstall, reset, &[Key::Agent], grant),
+        Outcome::Permitted
+    );
+    assert_eq!(w.remaining(grant), Err(Outcome::Policy(MISSING_STATE)));
+    assert_eq!(
+        w.direct(Method::Install, reset, &[Key::Agent], grant),
+        Outcome::Permitted
+    );
+    assert_eq!(w.remaining(grant), Ok(MAX_CALLS), "a fresh cap");
+}
+
+#[test]
+#[ignore = "requires the pinned account and generated policy Wasm; run scripts/test-pinned-account-authorization.sh"]
+fn expired_weak_rules_are_noted_and_revived_only_through_live_management() {
+    let mut w = World::new();
+    let expiry = START + 5;
+    let reset = w
+        .add_rule(Scope::Policy, &[Key::Agent], &[], Some(expiry))
+        .expect("a short-lived agent policy-address rule");
+    let management = w
+        .add_rule(Scope::Account, &[Key::Agent], &[], Some(expiry))
+        .expect("short-lived weak management authority");
+    assert_eq!(
+        refusals(&w.surface()),
+        vec![
+            (FindingCode::DelegateHasAuthority, Some(reset)),
+            (FindingCode::DelegateHasAuthority, Some(management)),
+        ]
+    );
+
+    // Once both have expired the check passes, listing them as expired: reviving one needs a
+    // live account-reaching rule, and the only one is the owner's.
+    w.advance_to(expiry + 1);
+    let verdict = w.surface();
+    assert!(verdict.refusals.is_empty() && verdict.unresolved.is_empty());
+    assert_eq!(authority(&verdict), vec![owner_rule()]);
+    let expired_reset = ExpiredRule {
+        rule_id: reset,
+        context: StoredContextType::CallContract {
+            address: w.policy.clone(),
+        },
+        valid_until: expiry,
+    };
+    assert_eq!(
+        verdict.notes.expired_rules,
+        vec![
+            expired_reset.clone(),
+            ExpiredRule {
+                rule_id: management,
+                context: StoredContextType::CallContract {
+                    address: w.account.clone(),
+                },
+                valid_until: expiry,
+            },
+        ]
+    );
+    let grant = w.install_grant().expect("grant installs");
+    for _ in 0..2 {
+        assert_eq!(w.grant_call(grant), Outcome::Permitted);
+    }
+
+    // Expired, the policy-address rule cannot reset the policy, and the management rule can
+    // neither reset it through `execute` nor revive either rule, itself included.
+    let revive = |rule: u32| {
+        move |env: &Env, _: &Parties| {
+            svec![env, rule.into_val(env), Some(START + 100).into_val(env)]
+        }
+    };
+    assert_eq!(
+        w.direct(Method::Uninstall, reset, &[Key::Agent], grant),
+        Outcome::Account(UNVALIDATED_CONTEXT)
+    );
+    assert_eq!(
+        w.execute(Method::Uninstall, management, &[Key::Agent], grant),
+        Outcome::Account(UNVALIDATED_CONTEXT)
+    );
+    for rule in [reset, management] {
+        assert_eq!(
+            w.manage_as(
+                "update_context_rule_valid_until",
+                revive(rule),
+                management,
+                &[Key::Agent]
+            ),
+            Outcome::Account(UNVALIDATED_CONTEXT),
+            "rule {rule} revived through the expired management rule"
+        );
+    }
+    assert_eq!(w.remaining(grant), Ok(MAX_CALLS - 2));
+
+    // The listed authority revives the management rule, and the check refuses it again.
+    assert_eq!(
+        w.manage("update_context_rule_valid_until", revive(management)),
+        Outcome::Permitted
+    );
+    let verdict = w.surface();
+    assert_eq!(
+        refusals(&verdict),
+        vec![
+            (FindingCode::DelegateHasAuthority, Some(management)),
+            (FindingCode::DelegateGrantOverlap, Some(grant)),
+        ]
+    );
+    assert_eq!(verdict.notes.expired_rules, vec![expired_reset]);
+
+    // Through it the agent alone revives its policy-address rule and resets the cap.
+    assert_eq!(
+        w.manage_as(
+            "update_context_rule_valid_until",
+            revive(reset),
+            management,
+            &[Key::Agent]
+        ),
+        Outcome::Permitted
+    );
+    let verdict = w.surface();
+    assert_eq!(
+        refusals(&verdict),
+        vec![
+            (FindingCode::DelegateHasAuthority, Some(reset)),
+            (FindingCode::DelegateHasAuthority, Some(management)),
+            (FindingCode::DelegateGrantOverlap, Some(grant)),
+        ]
+    );
+    assert!(verdict.notes.expired_rules.is_empty());
+    assert_eq!(
+        w.direct(Method::Uninstall, reset, &[Key::Agent], grant),
+        Outcome::Permitted
+    );
+    assert_eq!(
+        w.direct(Method::Install, reset, &[Key::Agent], grant),
+        Outcome::Permitted
+    );
+    assert_eq!(w.remaining(grant), Ok(MAX_CALLS), "a fresh cap");
+}
+
+#[test]
+#[ignore = "requires the pinned account and generated policy Wasm; run scripts/test-pinned-account-authorization.sh"]
+fn archived_management_rule_is_restored_and_used_in_one_transaction() {
+    let mut w = World::new();
+    let management = w
+        .add_rule(Scope::Account, &[Key::Agent], &[], None)
+        .expect("owner creates weak management authority");
+    assert_eq!(
+        refusals(&w.surface()),
+        vec![(FindingCode::DelegateHasAuthority, Some(management))]
+    );
+    // Deliberately bypass the refusal to demonstrate the authority it protects.
+    let grant = w.install_grant().expect("owner installs anyway");
+    for _ in 0..3 {
+        assert_eq!(w.grant_call(grant), Outcome::Permitted);
+    }
+    let archived = w.rule_key(management);
+    w.advance_to(w.sequence() + 1);
+    w.expire(std::slice::from_ref(&archived));
+
+    // The scan reads the archived rule neither as live nor as absent: it stops, so the check
+    // gives no verdict until the entry is restored.
+    let refusal = w.scan().expect_err("the scan refuses an archived rule");
+    assert_eq!(refusal.code(), "E_INCOMPLETE_ACCOUNT_STATE");
+    assert_eq!(
+        refusal.to_string(),
+        format!("E_INCOMPLETE_ACCOUNT_STATE: returned archived rule {management}")
+    );
+
+    let reset_rule = |w: &mut World| {
+        w.add_rule_as(
+            Scope::Policy,
+            &[Key::Agent],
+            &[],
+            None,
+            management,
+            &[Key::Agent],
+        )
+    };
+    let next = w.next_rule_id();
+    assert_eq!(reset_rule(&mut w), Err(Outcome::Archived));
+    assert_eq!(w.refused, vec![archived.clone()]);
+    assert_eq!(w.next_rule_id(), next, "nothing ran");
+
+    // The transaction that uses the rule restores it: the agent alone creates a policy-address
+    // rule through the archived management rule.
+    let (restored, reset) = w.restoring(reset_rule);
+    assert_eq!(restored, vec![archived], "only the rule entry was archived");
+    let reset = reset.expect("the restored rule authorizes management");
+    assert_eq!(
+        refusals(&w.surface()),
+        vec![
+            (FindingCode::DelegateHasAuthority, Some(management)),
+            (FindingCode::DelegateGrantOverlap, Some(grant)),
+            (FindingCode::DelegateHasAuthority, Some(reset)),
+        ]
+    );
+    assert_eq!(
+        w.direct(Method::Uninstall, reset, &[Key::Agent], grant),
+        Outcome::Permitted
+    );
+    assert_eq!(w.remaining(grant), Err(Outcome::Policy(MISSING_STATE)));
+}
+
+#[test]
+#[ignore = "requires the pinned account and generated policy Wasm; run scripts/test-pinned-account-authorization.sh"]
+fn weak_account_rule_reaches_the_policy_and_the_code_through_wrapper_methods() {
+    let mut w = World::new();
+    let management = w
+        .add_rule(Scope::Account, &[Key::Agent], &[], None)
+        .expect("owner creates weak management authority");
+    // The check treats an account-address rule as authority over everything the account can
+    // do, so the agent's is refused before any `execute` is made.
+    let verdict = w.surface();
+    assert_eq!(
+        refusals(&verdict),
+        vec![(FindingCode::DelegateHasAuthority, Some(management))]
+    );
+    assert_eq!(
+        authority(&verdict),
+        vec![
+            owner_rule(),
+            (
+                management,
+                Reach::AccountCalls,
+                vec![Key::Agent.g_address()]
+            ),
+        ]
+    );
+    // Deliberately bypass the refusal to demonstrate the authority it protects.
+    let grant = w.install_grant().expect("owner installs anyway");
+    for _ in 0..MAX_CALLS {
+        assert_eq!(w.grant_call(grant), Outcome::Permitted);
+    }
+    assert_eq!(w.grant_call(grant), Outcome::Policy(CALL_COUNT_EXCEEDED));
+    assert_eq!(
+        w.direct(Method::Uninstall, management, &[Key::Agent], grant),
+        Outcome::Account(UNVALIDATED_CONTEXT),
+        "the account-address rule cannot call the policy directly"
+    );
+    assert_eq!(
+        w.execute(Method::Uninstall, grant, &[Key::Agent], grant),
+        Outcome::Account(UNVALIDATED_CONTEXT),
+        "the grant's own rule cannot reach `execute`"
+    );
+
+    // Through the wrapper's `execute`, the account calls the policy itself: no rule matching
+    // the policy's address is needed.
+    let next = w.next_rule_id();
+    assert_eq!(
+        w.execute(Method::Uninstall, management, &[Key::Agent], grant),
+        Outcome::Permitted
+    );
+    assert_eq!(w.remaining(grant), Err(Outcome::Policy(MISSING_STATE)));
+    assert_eq!(
+        w.execute(Method::Install, management, &[Key::Agent], grant),
+        Outcome::Permitted
+    );
+    assert_eq!(w.remaining(grant), Ok(MAX_CALLS), "a fresh cap");
+    assert_eq!(w.next_rule_id(), next, "with no new rule");
+    assert_eq!(w.grant_call(grant), Outcome::Permitted);
+
+    // The wrapper's `batch_add_signer` changes a rule's signers like `add_signer`; on the grant,
+    // the generated policy refuses the changed set.
+    assert_eq!(
+        w.manage_as(
+            "batch_add_signer",
+            |env, p| svec![
+                env,
+                grant.into_val(env),
+                svec![env, Signer::Delegated(p.of(env, Key::Third))].into_val(env)
+            ],
+            management,
+            &[Key::Agent],
+        ),
+        Outcome::Permitted
+    );
+    assert_eq!(w.grant_call(grant), Outcome::Policy(SIGNER_SET_DIVERGED));
+
+    // The wrapper's `upgrade` replaces the account's code; here, with the policy's.
+    let policy_code = Hash32::from_hex(REVIEWED_POLICY_WASM).unwrap().0;
+    assert_eq!(
+        w.manage_as(
+            "upgrade",
+            |env, p| svec![
+                env,
+                BytesN::from_array(env, &policy_code).into_val(env),
+                p.of(env, Key::Agent).into_val(env)
+            ],
+            management,
+            &[Key::Agent],
+        ),
+        Outcome::Permitted,
+        "the agent alone replaces the account's code"
+    );
+    assert_eq!(w.account_code(), policy_code);
+
+    // Held by another key, the same rule is not refused but listed as account authority with
+    // its signer, and that signer alone can reset the policy through `execute` the same way.
+    let mut other = World::new();
+    let held = other
+        .add_rule(Scope::Account, &[Key::Third], &[], None)
+        .expect("an account-address rule held by another key");
+    let verdict = other.surface();
+    assert!(verdict.refusals.is_empty() && verdict.unresolved.is_empty());
+    assert_eq!(
+        authority(&verdict),
+        vec![
+            owner_rule(),
+            (held, Reach::AccountCalls, vec![Key::Third.g_address()]),
+        ]
+    );
+    let grant = other.install_grant().expect("grant installs");
+    assert_eq!(other.grant_call(grant), Outcome::Permitted);
+    assert_eq!(
+        other.execute(Method::Uninstall, held, &[Key::Third], grant),
+        Outcome::Permitted
+    );
+    assert_eq!(
+        other.execute(Method::Install, held, &[Key::Third], grant),
+        Outcome::Permitted
+    );
+    assert_eq!(other.remaining(grant), Ok(MAX_CALLS));
+}
+
+#[test]
+#[ignore = "requires the pinned account and generated policy Wasm; run scripts/test-pinned-account-authorization.sh"]
+fn revoke_then_recreate_never_overlaps_and_bounds_aggregate_use() {
+    let mut w = World::new();
+    let old = w.install_grant().expect("the grant being replaced");
+    for _ in 0..5 {
+        assert_eq!(w.grant_call(old), Outcome::Permitted);
+    }
+    // Add-before-remove is refused: the old rule keeps its own counter.
+    assert_eq!(
+        refusals(&w.surface()),
+        vec![(FindingCode::DelegateGrantOverlap, Some(old))]
+    );
+
+    // Step 1: the owner removes the old rule. Its state goes with it, and nothing can bring the
+    // rule back; until step 2 the agent has no authority over the target.
+    assert_eq!(
+        w.manage("remove_context_rule", |env, _| svec![
+            env,
+            old.into_val(env)
+        ]),
+        Outcome::Permitted
+    );
+    assert!(!w.is_installed(old));
+    assert_eq!(w.grant_call(old), Outcome::Account(CONTEXT_RULE_NOT_FOUND));
+    assert_eq!(
+        w.manage("update_context_rule_valid_until", |env, _| svec![
+            env,
+            old.into_val(env),
+            Some(START + 100).into_val(env)
+        ]),
+        Outcome::Account(CONTEXT_RULE_NOT_FOUND)
+    );
+    let verdict = w.surface();
+    assert_eq!(authority(&verdict), vec![owner_rule()]);
+    assert!(verdict.refusals.is_empty() && verdict.unresolved.is_empty());
+
+    // Step 2 fails here (its validity passed before submission) and installs nothing: the gap
+    // stays a gap until it is retried.
+    let next = w.next_rule_id();
+    let lapsed = w.sequence() - 1;
+    assert_eq!(
+        w.add_rule(
+            Scope::Target,
+            &[Key::Agent],
+            &[|p| p.policy.clone()],
+            Some(lapsed)
+        ),
+        Err(Outcome::Account(PAST_VALID_UNTIL))
+    );
+    assert_eq!(w.next_rule_id(), next);
+    assert_eq!(w.grant_call(next), Outcome::Account(CONTEXT_RULE_NOT_FOUND));
+
+    // Step 2 retried: the replacement, fully configured in one `add_context_rule`.
+    let new = w.install_grant().expect("the replacement installs");
+    assert_eq!(new, next);
+    assert_eq!(w.remaining(new), Ok(MAX_CALLS));
+    assert_eq!(w.remaining(old), Err(Outcome::Policy(MISSING_STATE)));
+    assert_eq!(
+        refusals(&w.surface()),
+        vec![(FindingCode::DelegateGrantOverlap, Some(new))],
+        "the next replacement must revoke first too"
+    );
+
+    // Both rule ids, exercised until neither permits: one cap in aggregate, never two.
+    let mut permitted = 0;
+    for _ in 0..=MAX_CALLS {
+        for rule in [old, new] {
+            if w.grant_call(rule) == Outcome::Permitted {
+                permitted += 1;
+            }
+        }
+    }
+    assert_eq!(permitted, MAX_CALLS);
+    assert_eq!(w.grant_call(old), Outcome::Account(CONTEXT_RULE_NOT_FOUND));
+    assert_eq!(w.grant_call(new), Outcome::Policy(CALL_COUNT_EXCEEDED));
 }

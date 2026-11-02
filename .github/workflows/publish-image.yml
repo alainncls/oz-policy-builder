@@ -1,0 +1,176 @@
+name: publish image
+
+# Publishes the self-hosted API and TLS proxy images to GHCR for a published GitHub Release,
+# after every check the self-hosted workflow runs (build-context boundary, TLS and offline
+# reproduction, rootless worker containment), on each architecture. It deploys nothing and runs
+# no service. A pull request that changes this file runs the same build and checks on both
+# architectures without logging in or pushing.
+#
+# Permissions: the build job needs `packages: write` to push on a release, and a job's
+# permissions cannot depend on the event, so a same-repository pull request's run holds it too
+# (a fork's token is read-only). Its push steps do not run on pull requests, and checkout does
+# not persist the token into the repository the job's scripts run in.
+on:
+  release:
+    types: [published]
+  pull_request:
+    paths:
+      - .github/workflows/publish-image.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build and test (${{ matrix.arch }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    env:
+      ARCH: ${{ matrix.arch }}
+      # Through the environment, not interpolated into scripts: the tag comes from the event
+      # payload.
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      OWNER: ${{ github.repository_owner }}
+      SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: the release tag names the workspace version
+        if: github.event_name == 'release'
+        run: |
+          set -euo pipefail
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          if [ "$RELEASE_TAG" != "v$version" ]; then
+            echo "release tag $RELEASE_TAG does not name workspace version v$version" >&2
+            exit 1
+          fi
+      - name: build-context publication boundary
+        run: |
+          python3 scripts/test-hosted-context.py
+          python3 scripts/test-hosted-mcp.py
+          python3 scripts/test-worker-launcher.py
+      - name: build immutable source context and both images
+        run: |
+          set -euo pipefail
+          python3 scripts/hosted-context.py HEAD > "$RUNNER_TEMP/ozpb-context.tar"
+          # The source label links the GHCR packages to this repository.
+          docker build --pull --target proxy --file deployment/Dockerfile \
+            --label "org.opencontainers.image.source=$SOURCE_URL" \
+            --tag ozpb-proxy:check - < "$RUNNER_TEMP/ozpb-context.tar"
+          docker build --pull --file deployment/Dockerfile \
+            --label "org.opencontainers.image.source=$SOURCE_URL" \
+            --tag ozpb-self-host:check - < "$RUNNER_TEMP/ozpb-context.tar"
+      - name: TLS transport and real offline artifact reproduction
+        run: |
+          set -euo pipefail
+          export OZPB_IMAGE="$(docker image inspect ozpb-self-host:check --format '{{.Id}}')"
+          export OZPB_PROXY_IMAGE="$(docker image inspect ozpb-proxy:check --format '{{.Id}}')"
+          bash scripts/test-hosted-container.sh
+      - name: rootless worker containment and independent lifecycle
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes podman uidmap
+          sudo loginctl enable-linger "$(id -un)"
+          sudo systemctl start "user@$(id -u).service"
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+          docker save ozpb-self-host:check | podman load >/dev/null
+          worker_image=$(podman image inspect ozpb-self-host:check --format '{{.Id}}')
+          case "$worker_image" in sha256:*) ;; *) worker_image="sha256:$worker_image" ;; esac
+          systemd-run --user --scope --quiet -p Delegate=yes \
+            python3 scripts/test-worker-containment.py --image "$worker_image"
+      - name: push this architecture's images
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          repository="ghcr.io/${OWNER,,}/oz-policy-builder"
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag ozpb-self-host:check "$repository:$RELEASE_TAG-$ARCH"
+          docker tag ozpb-proxy:check "$repository-proxy:$RELEASE_TAG-$ARCH"
+          docker push "$repository:$RELEASE_TAG-$ARCH"
+          docker push "$repository-proxy:$RELEASE_TAG-$ARCH"
+
+  publish:
+    name: publish multi-architecture images
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      OWNER: ${{ github.repository_owner }}
+    steps:
+      - name: combine both architectures under the release tag
+        id: index
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          repository="ghcr.io/${OWNER,,}/oz-policy-builder"
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          for image in "$repository" "$repository-proxy"; do
+            docker buildx imagetools create --tag "$image:$RELEASE_TAG" \
+              "$image:$RELEASE_TAG-amd64" "$image:$RELEASE_TAG-arm64"
+          done
+          digest() {
+            docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' \
+              | python3 -c 'import json, sys; print(json.load(sys.stdin)["digest"])'
+          }
+          # Assigned first, so a failed lookup stops this step instead of attesting nothing.
+          api_digest=$(digest "$repository:$RELEASE_TAG")
+          proxy_digest=$(digest "$repository-proxy:$RELEASE_TAG")
+          {
+            echo "api_name=$repository"
+            echo "api_digest=$api_digest"
+            echo "proxy_name=$repository-proxy"
+            echo "proxy_digest=$proxy_digest"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.index.outputs.api_name }}
+          subject-digest: ${{ steps.index.outputs.api_digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.index.outputs.proxy_name }}
+          subject-digest: ${{ steps.index.outputs.proxy_digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: record the immutable references
+        env:
+          API: ${{ steps.index.outputs.api_name }}@${{ steps.index.outputs.api_digest }}
+          PROXY: ${{ steps.index.outputs.proxy_name }}@${{ steps.index.outputs.proxy_digest }}
+        run: |
+          {
+            echo "### Images for $RELEASE_TAG"
+            echo
+            echo "Deploy by digest, not by tag:"
+            echo
+            echo "- \`OZPB_IMAGE=$API\`"
+            echo "- \`OZPB_PROXY_IMAGE=$PROXY\`"
+          } >> "$GITHUB_STEP_SUMMARY"

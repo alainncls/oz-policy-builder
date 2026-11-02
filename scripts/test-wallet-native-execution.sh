@@ -79,7 +79,8 @@ OZPB_NATIVE_E2E_CLI="$cli" OZPB_NATIVE_E2E_RUNTIME="$runtime" OZPB_NATIVE_E2E_WO
 for name in \
     'the wallet runs the actual worker and accepts only its independently checked report' \
     'the actual worker report is refused against a changed independent expectation' \
-    'the actual worker preparation is refused for another proposed rule ID'; do
+    'the actual worker preparation is refused for another proposed rule ID' \
+    'the actual worker report is refused when a boundary ledger differs from the CLI suite'; do
     grep -qF "✔ $name" "$work/result.log" || {
         echo "required wallet native execution test did not run and pass: $name" >&2
         exit 1

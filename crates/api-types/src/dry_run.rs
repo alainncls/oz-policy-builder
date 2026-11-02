@@ -183,6 +183,9 @@ pub struct DryRunOutput {
     pub artifact_verification: VerifyOutput,
     /// Selected-rule reference evidence only, with explicit model gaps.
     pub reference_report: serde_json::Value,
+    /// Synthetic ledger for each selected reference outcome, in the same order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_case_ledgers: Option<Vec<u32>>,
     /// Always the four named layers in their declared order.
     pub layers: Vec<DryRunLayer>,
     /// False until every required runtime layer is actually executed and checked.

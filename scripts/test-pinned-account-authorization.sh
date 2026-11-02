@@ -108,7 +108,13 @@ for test in \
     failed_composition_rolls_back_the_permitting_policy \
     weak_account_rule_can_create_a_policy_reset_rule \
     weak_management_can_revive_an_expired_rule_without_resetting_its_counter \
-    overlapping_real_account_grants_have_independent_caps; do
+    overlapping_real_account_grants_have_independent_caps \
+    weak_account_rule_cannot_widen_the_grant_signers_but_can_strip_its_policy \
+    weak_account_rule_can_take_over_a_protected_rule_by_adding_its_signer \
+    expired_weak_rules_are_noted_and_revived_only_through_live_management \
+    archived_management_rule_is_restored_and_used_in_one_transaction \
+    weak_account_rule_reaches_the_policy_and_the_code_through_wrapper_methods \
+    revoke_then_recreate_never_overlaps_and_bounds_aggregate_use; do
     grep -qx "test $test ... ok" "$work/invariants.log" || {
         echo "required state-invariant test did not run and pass: $test" >&2
         exit 1
