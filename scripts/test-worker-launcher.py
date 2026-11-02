@@ -147,10 +147,70 @@ class LauncherTests(unittest.TestCase):
                 mock.patch.object(worker.sys, "stderr", io.StringIO()):
             status = worker.main()
         self.assertEqual(status, 0)
-        self.assertLessEqual(len(output.getvalue()), len(raw) + 1)
-        frame = json.loads(output.getvalue())
+        written = output.getvalue()
+        self.assertTrue(written.startswith(worker.READY))
+        written = written[len(worker.READY):]
+        self.assertLessEqual(len(written), len(raw) + 1)
+        frame = json.loads(written)
         self.assertEqual(frame["containment"], "removed")
         self.assertIsNone(frame["result"])
+
+    def test_ready_is_reported_once_the_stop_handler_is_installed_and_before_the_job_is_read(self):
+        self._stop_state()
+        seen = {}
+        class Output(io.BytesIO):
+            def write(self, data):
+                seen.setdefault("handler at ready", signal.getsignal(signal.SIGTERM))
+                return super().write(data)
+        output = Output()
+        class Input:
+            def read(self, _size):
+                seen["handler"] = signal.getsignal(signal.SIGTERM)
+                seen["written"] = output.getvalue()
+                return json.dumps(job()).encode()
+        with mock.patch.object(worker, "load_config", return_value=config()), \
+                mock.patch.object(worker, "preflight", side_effect=worker.Refused()), \
+                mock.patch.object(worker.sys, "argv", ["worker-launcher"]), \
+                mock.patch.object(worker.sys, "stdin", SimpleNamespace(buffer=Input())), \
+                mock.patch.object(worker.sys, "stdout", SimpleNamespace(buffer=output)), \
+                mock.patch.object(worker.sys, "stderr", io.StringIO()):
+            self.assertEqual(worker.main(), 0)
+        self.assertIs(seen["handler at ready"], worker.stop_requested)
+        self.assertIs(seen["handler"], worker.stop_requested)
+        self.assertEqual(seen["written"], worker.READY)
+
+    def test_a_stop_after_the_frame_is_written_cannot_kill_a_confirmed_launcher(self):
+        # Interpreter shutdown restores SIGTERM's default action after flushing the frame. A stop
+        # landing then would kill a launcher whose removal is already confirmed, and the API
+        # would retain a slot that is free.
+        frame = dict(schema="contained-build-result/v1", job_hash="0" * 64, containment="removed", result=None)
+        code = ("import importlib.util\n"
+                f"spec=importlib.util.spec_from_file_location('launcher',{str(ROOT / 'deployment/worker-launcher.py')!r})\n"
+                "m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\n"
+                "m.load_config=lambda: {}\n"
+                f"m.launch=lambda raw, config: {frame!r}\n"
+                "raise SystemExit(m.main())\n")
+        for _ in range(20):
+            process = subprocess.Popen([sys.executable, "-I", "-c", code], stdin=subprocess.DEVNULL,
+                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            try:
+                data = b""
+                while True:
+                    chunk = os.read(process.stdout.fileno(), 65536)
+                    self.assertTrue(chunk, "the launcher closed stdout without a frame")
+                    data += chunk
+                    try:
+                        self.assertEqual(json.loads(data[len(worker.READY):]), frame)
+                        break
+                    except json.JSONDecodeError:
+                        continue
+                process.send_signal(signal.SIGTERM)
+                self.assertEqual(process.wait(timeout=10), 0)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+                process.stdout.close()
 
     def test_deeply_nested_worker_json_preserves_confirmed_cleanup(self):
         raw = b"[" * 2000 + b"0" + b"]" * 2000
