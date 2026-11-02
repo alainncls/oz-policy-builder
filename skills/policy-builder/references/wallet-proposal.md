@@ -61,4 +61,3 @@ No other field. Explain briefly how the wallet treats the unverified proposal:
   not match, because two acquisitions can observe different context;
 - it shows the delegate, expiry and cap for approval and owns deployment consent, the owner
   signature and submission.
-

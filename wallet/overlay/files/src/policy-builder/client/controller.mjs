@@ -193,6 +193,11 @@ export class WalletController {
       if (!wallet) throw refused();
       let delegate = this.#state.delegate;
       if (!delegate) {
+        // A reloaded page no longer holds the old delegate capability. The owner's
+        // explicit Connect action revokes any prior draft connection before rotating it.
+        const disconnected = await this.#request('disconnect-agent', {});
+        if (disconnected?.disconnected !== true) throw refused();
+        this.#set({ agent: null });
         const result = await this.#request('create-delegate', {});
         if (!HASH.test(result?.capabilityId) || !/^G[A-Z2-7]{55}$/.test(result.address ?? '')) throw refused();
         delegate = { capabilityId: result.capabilityId, address: result.address }; this.#set({ delegate });

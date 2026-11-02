@@ -756,7 +756,8 @@ Design rules:
 
 > **Scope: Tranche 2.** `skills/policy-builder/SKILL.md` and the Claude plugin are available.
 > They guide recording, synthesis, layer-1 reference checks, generation, and verification.
-> Full contract/live dry-run evidence and wallet installation remain scheduled work.
+> MCP prepares and delivers drafts; the wallet performs its supported execution checks
+> and installation separately.
 
 A packaged Claude skill (portable to other agent frameworks — the skill layer is thin by
 design) that wraps the MCP tools with the conversational entry point the RFP describes:
