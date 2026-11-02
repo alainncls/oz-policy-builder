@@ -13,9 +13,9 @@ or this guide alone does not establish that the hosted service is running.
 Use the disposable-worker mode below when preparing the hosted testnet deployment. Choosing
 its hosting provider is an operational decision, not a separate milestone requirement.
 Present the actual account, hostname/TLS plan, image digest, client access boundary, cost,
-budget alert and stop condition before creating paid resources. Production availability and
-mainnet operation belong to Tranche 3; the testnet deployment still needs its own security
-and operational acceptance checks.
+budget alert and stop condition before creating paid resources. Tranche 3 delivers a production
+versioned release that operators run themselves; Gateway operates no production service. The
+testnet deployment still needs its own security and operational acceptance checks.
 
 **The API and compiler still share a trust domain.** Container resource limits, Cargo's
 offline setting and environment filtering are useful bounds, but they do not isolate each
