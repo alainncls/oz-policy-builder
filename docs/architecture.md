@@ -1617,8 +1617,9 @@ revocation.
 **Phase 3 — Mainnet (harden & ship).** Security audit across the full
 authorization-to-install path (§6.4), findings remediated and published; documented
 OpenZeppelin technical-reviewer feedback incorporated (generated-code quality sign-off before
-mainnet); production versioned endpoint; source + manifests published keyed by wasm hash;
-registry governance fully operational (transparency log, monitoring, revocation drills);
+mainnet); production versioned endpoint (a self-hostable release; Gateway operates no
+service); source + manifests published keyed by wasm hash; registry governance implemented and
+documented (transparency log, monitoring, revocation procedure);
 full docs (usage, scoping-decision rationale, trust boundaries, extension guide for new
 primitives and adapters); complete test suite; mainnet wallet integration hardened;
 disclosure policy + incident/revocation guidance published.
