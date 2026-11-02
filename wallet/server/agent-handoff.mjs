@@ -1,3 +1,4 @@
+import { NATIVE_LIMITS } from '../shared/execution-limits.mjs';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { NETWORK_ID, freezeCopy } from '../shared/approval.mjs';
 import { parseGrantProposal } from '../shared/proposal.mjs';
@@ -29,7 +30,7 @@ export class AgentHandoff {
     const c = this.#connection;
     return c ? { connectionId: c.connectionId, account: c.wallet.contractId, delegate: c.delegate.address,
       networkId: NETWORK_ID, expiresInSeconds: Math.max(0, Math.ceil((c.expires - this.#now()) / 1000)),
-      limits: { maxValidityLedgers: 17280, maxCalls: 10000, exactNativeTransferOnly: true } } : null;
+      limits: { maxValidityLedgers: 17280, maxCalls: NATIVE_LIMITS.maxCalls, exactNativeTransferOnly: true } } : null;
   }
   pair({ wallet, delegate }) {
     this.disconnect();
@@ -51,7 +52,8 @@ export class AgentHandoff {
       || typeof proposal !== 'string' || Buffer.byteLength(proposal) > 16384
       || typeof deliveryId !== 'string' || !/^[0-9a-f]{64}$/.test(deliveryId) || deliveryId !== hash(proposal)) refuse();
     const parsed = parseGrantProposal(proposal, this.#connection.wallet.contractId);
-    if (parsed.decisions.delegate !== this.#connection.delegate.address) refuse();
+    if (parsed.decisions.delegate !== this.#connection.delegate.address
+      || parsed.decisions.max_calls > NATIVE_LIMITS.maxCalls) refuse();
     const previous = this.#seen.get(deliveryId);
     if (previous) return freezeCopy(previous);
     if (this.#pending || this.#seen.size >= 8) refuse();

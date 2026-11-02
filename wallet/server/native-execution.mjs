@@ -1,3 +1,5 @@
+import { NATIVE_LIMITS } from '../shared/execution-limits.mjs';
+export { NATIVE_LIMITS } from '../shared/execution-limits.mjs';
 import { randomBytes } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { Keypair, StrKey } from '@stellar/stellar-sdk';
@@ -26,9 +28,8 @@ const CONTROL = ['name', 'passed', 'refusal_stage', 'state_before_hash', 'state_
 const STATEFUL = ['successful_calls', 'counter_before', 'counter_after', 'overflow_refused', 'overflow_rolled_back',
   'partial_rollback_refused', 'partial_rollback_preserved_counter', 'passed'];
 const LEDGER = ['protocol_version', 'sequence', 'timestamp', 'base_reserve', 'min_temp_entry_ttl', 'min_persistent_entry_ttl', 'max_entry_ttl'];
-const MAX_CASES = 256, MAX_CALLS = 512, MAX_DELEGATES = 8;
-/** Mirrors the worker's supported scope; larger grants are reported unsupported, never run. */
-export const NATIVE_LIMITS = Object.freeze({ maxCases: MAX_CASES, maxCalls: MAX_CALLS });
+const { maxCases: MAX_CASES, maxCalls: MAX_CALLS } = NATIVE_LIMITS;
+const MAX_DELEGATES = 8;
 
 const refuse = () => { throw new Error('native account check refused; no execution evidence accepted'); };
 const u32 = (n) => Number.isSafeInteger(n) && n >= 0 && n <= 0xffffffff;

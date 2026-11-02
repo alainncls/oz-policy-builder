@@ -111,7 +111,7 @@ impl WalletBridge {
                     .to_hex()
             || connection.expires_in_seconds == 0
             || connection.expires_in_seconds > 1800
-            || connection.limits.max_calls != 10000
+            || connection.limits.max_calls != 512
             || connection.limits.max_validity_ledgers != 17280
             || !connection.limits.exact_native_transfer_only
         {

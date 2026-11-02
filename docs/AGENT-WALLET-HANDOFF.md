@@ -2,7 +2,9 @@
 
 The Policy Builder can deliver a confirmed grant proposal from Claude to an open wallet
 session without copying proposal JSON or invoking a second skill. This supports the existing
-exact native-XLM testnet transfer shape. Claude and the wallet backend must run on the same
+exact native-XLM testnet transfer shape, with a call cap of at most 512 so the native
+execution checks can run. Manual import accepts up to 10,000 for inspection, but a cap above
+512 cannot complete the current worker checks. Claude and the wallet backend must run on the same
 computer. A remote hosted MCP server cannot reach a user's local wallet; no relay or general
 wallet-connection protocol is supplied.
 

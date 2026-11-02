@@ -770,7 +770,7 @@ class DirectWalletHandoff(unittest.TestCase):
     def events(self, body=None):
         connection = {"connection": {"account": ACCOUNT, "delegate": DELEGATE, "networkId": NETWORK_ID,
             "connectionId": "ef" * 32, "expiresInSeconds": 1800,
-            "limits": {"maxCalls": 10000, "maxValidityLedgers": 17280, "exactNativeTransferOnly": True}}}
+            "limits": {"maxCalls": 512, "maxValidityLedgers": 17280, "exactNativeTransferOnly": True}}}
         return [call("pair", MCP + "connect_wallet", {"pairing_code": "ozpb-pair-" + "aa" * 32}),
                 result("pair", connection)] + session()[:-2] + [
                 call("deliver", MCP + "send_wallet_proposal", {"proposal_json": json.dumps(body or proposal())})]

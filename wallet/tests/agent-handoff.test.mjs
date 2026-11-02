@@ -105,3 +105,16 @@ test('a connection keeps at most eight delivery receipts without forgetting repl
     else { f.bridge.deliver(f.connection.capability, delivery); f.bridge.dismiss(delivery.deliveryId); }
   }
 });
+
+test('direct connection advertises and enforces the executable call cap rather than the import cap', () => {
+  const f = fixture();
+  assert.equal(f.connection.connection.limits.maxCalls, 512);
+  const changed = structuredClone(f.proposal);
+  changed.decisions.max_calls = 513; changed.expected_grant.rules[0].max_calls = 513;
+  const proposal = JSON.stringify(changed);
+  assert.throws(() => f.bridge.deliver(f.connection.capability, { deliveryId: digest(proposal), proposal }));
+  assert.equal(f.bridge.view().pending, null);
+  changed.decisions.max_calls = 512; changed.expected_grant.rules[0].max_calls = 512;
+  const exact = JSON.stringify(changed);
+  assert.equal(f.bridge.deliver(f.connection.capability, { deliveryId: digest(exact), proposal: exact }).status, 'pending');
+});

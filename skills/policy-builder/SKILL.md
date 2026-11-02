@@ -65,7 +65,9 @@ wallet backend run on the same computer; a hosted MCP server cannot reach the us
 wallet. Never ask for the wallet's session URL, browser bearer, credential locator, delegate
 capability or a secret key. The pairing code grants draft delivery only.
 
-Use the returned public account, delegate and limits while discussing the grant. Do not silently
+Use the returned public account, delegate and limits while discussing the grant. The direct
+connection caps the grant at 512 calls, matching the executable worker scope; the broader
+manual import limit is not a promise that its execution checks support larger caps. Do not silently
 replace a delegate the user explicitly requested: explain the wallet's automation-delegate
 limit and let them choose the wallet flow or manual deployment. Restate the full decisions and
 wait for acceptance as below. A new connection after the final card changes the handoff target;
