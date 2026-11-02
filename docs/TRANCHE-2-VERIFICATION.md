@@ -24,7 +24,8 @@ that design, rather than silently counted as complete or moved to the next miles
 | Hosted testnet endpoint | Authenticated HTTP, per-tool quotas, request cancellation, TLS packaging and disposable build workers have unit, container or containment tests. | A running reachable testnet service, a published self-hostable image and acceptance checks against that deployed service. A container build is not a deployment. |
 | Public demo and video with passing reports | Walkthrough runners and historical records exist. | Assemble the final demonstration, reports and artifact inventory; record and publish the video. This is an explicit deliverable. |
 
-Production hosting, security-audit remediation/publication, OpenZeppelin generated-code
+The production versioned release (self-hostable; Gateway operates no service),
+security-audit remediation/publication, OpenZeppelin generated-code
 sign-off and a mainnet wallet installation belong to
 [issue #4 / Tranche 3](https://github.com/gateway-fm/oz-policy-builder/issues/4).
 The full documentation/test-suite delivery is also listed there. Tranche 2 still needs the
