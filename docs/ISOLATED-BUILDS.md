@@ -12,7 +12,8 @@ an artifact. The API never mounts a Docker socket or starts a privileged nested 
 This mode requires Linux, rootless Podman with `--timeout` support, subordinate user/group
 IDs, and delegated cgroup v2 CPU, memory and PID controllers. A platform without these
 controls must fail its acceptance checks before receiving untrusted jobs. The package does
-not provision a provider, publish an image, create a DNS record, or configure a public endpoint.
+not provision a provider, create a DNS record, or configure a public endpoint. Released images
+come from the release workflow described in [Self-hosting](SELF-HOSTING.md#build-the-reviewed-revision).
 
 ## Configure a Linux host
 

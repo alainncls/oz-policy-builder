@@ -2,7 +2,9 @@
 
 This package runs the versioned MCP endpoint for **one operator and trusted clients**. It
 works on a Linux Docker host independently of any hosting provider. It does not provision
-cloud infrastructure, publish an image, or establish that an endpoint has been deployed.
+cloud infrastructure or establish that an endpoint has been deployed. Releases made after the
+publishing workflow was added also publish images; see
+[Build the reviewed revision](#build-the-reviewed-revision).
 
 The hosted testnet deliverable means running the MCP tools behind an authenticated HTTPS
 address for authorized remote clients. It is not a wallet or a Stellar validator/RPC node:
@@ -55,7 +57,21 @@ Wasm build inputs; Stellar downloads are checked by SHA-256. OS packages resolve
 image construction, so an image build is not claimed byte-reproducible. Record the resulting
 image digest, source revision, package inventory and test result. When publishing through
 your own registry, deploy the resulting immutable `repository@sha256:…` reference rather
-than a mutable tag. The supplied workflow builds and tests locally in CI; it never pushes.
+than a mutable tag. `self-hosted.yml` builds and tests in CI and never pushes.
+
+For each published GitHub Release whose tag (`v` plus the workspace version in `Cargo.toml`)
+contains it, `publish-image.yml` builds both images for amd64 and arm64 from the release tag,
+runs every check `self-hosted.yml` runs on each, and publishes them to
+`ghcr.io/gateway-fm/oz-policy-builder` and `ghcr.io/gateway-fm/oz-policy-builder-proxy` under
+the release tag, with a GitHub build-provenance attestation. The workflow summary lists both
+`@sha256` references; use those, and check them with
+`gh attestation verify oci://<reference> --repo gateway-fm/oz-policy-builder`. A published
+image is software for operators to run; it does not mean an endpoint is running.
+
+GHCR creates a new package as private. After the first publication an organization owner makes
+both packages public once, under the package's settings; GitHub does not allow making a public
+package private again. Until then, pulls and attestation checks from outside the organization
+are refused. `v0.1.0` predates the workflow and has no images.
 
 ## Configure the operator boundary
 
