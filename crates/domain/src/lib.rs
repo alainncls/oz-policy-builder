@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 mod canonical;
 pub mod target_adapters;
 mod target_capture;
+pub mod wide_int;
 pub use canonical::{
     canonical_hash, canonical_hash_of, canonical_preimage_bytes, canonical_preimage_bytes_of,
     to_scval, MAX_CANONICAL_PREIMAGE_BYTES,

@@ -15,17 +15,20 @@ const addressOf = (value) => Address.fromScAddress(value).toString();
 function summary(value) {
   if (value.type === 'scvAddress') return { address: scValToNative(value) };
   if (value.type === 'scvI128') return { i128: scValToNative(value).toString() };
-  if (value.type === 'scvU64') return { u64: Number(scValToNative(value)) };
+  if (value.type === 'scvU64') return { u64: scValToNative(value).toString() };
   return { other: { xdr_base64: Buffer.from(value.toXDR()).toString('base64') } };
 }
 function normalized(node) {
   const call = node?.call?.contract;
   requireThat(call && Array.isArray(call.args) && Array.isArray(node.sub_invocations), 'recorded tree');
+  // The CLI writes wide integers as decimal strings; recordings made before it wrote numbers.
   return { call: { contract: { ...call, args: call.args.map((arg) => {
-    if (arg?.i128 === undefined) return arg;
-    requireThat(Object.keys(arg).length === 1 && (typeof arg.i128 === 'bigint' || typeof arg.i128 === 'string'
-      || Number.isSafeInteger(arg.i128)) && /^-?(0|[1-9][0-9]*)$/.test(String(arg.i128)), 'recorded i128');
-    return { i128: String(arg.i128) };
+    const kind = ['i128', 'u64'].find((name) => arg?.[name] !== undefined);
+    if (kind === undefined) return arg;
+    const value = arg[kind];
+    requireThat(Object.keys(arg).length === 1 && (typeof value === 'bigint' || typeof value === 'string'
+      || Number.isSafeInteger(value)) && /^-?(0|[1-9][0-9]*)$/.test(String(value)), `recorded ${kind}`);
+    return { [kind]: String(value) };
   }) } }, sub_invocations: node.sub_invocations.map(normalized) };
 }
 function tree(root) {

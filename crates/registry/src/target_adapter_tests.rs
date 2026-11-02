@@ -82,26 +82,47 @@ fn dev_registry_resolves_soroswap_router_adapter_for_pinned_hash() {
     }
 }
 
+/// A snapshot as published before `ozpb_domain::wide_int`, with exactly its 64-bit integers
+/// respelled as the decimal strings written now: the only difference regeneration may make.
+fn with_wide_strings(published: &str) -> serde_json::Value {
+    let mut value: serde_json::Value = serde_json::from_str(published).unwrap();
+    let respell = |field: &mut serde_json::Value| {
+        let number = field.as_number().unwrap().to_string();
+        *field = serde_json::Value::String(number);
+    };
+    let snapshot = &mut value["snapshot"];
+    for key in ["version", "log_index", "valid_from_unix", "expires_at_unix"] {
+        respell(&mut snapshot[key]);
+    }
+    for revocation in snapshot["revocations"]
+        .as_object_mut()
+        .unwrap()
+        .values_mut()
+    {
+        respell(&mut revocation["effective_version"]);
+    }
+    value
+}
+
 #[test]
 fn existing_signed_snapshot_keeps_its_root_and_signature() {
     // Version 3 as it was published, byte for byte, before version 4 replaced the committed
-    // example. Adding the adapter field must not move its root, its signature or its bytes.
+    // example. Adding the adapter field must not move its root or its signature. Its 64-bit
+    // integers were published as JSON numbers and are now written as decimal strings
+    // (`ozpb_domain::wide_int`), so the bytes differ; the snapshot they carry must not.
     let text = include_str!("published-v3.signed.json");
     let (regenerated, _) = dev::dev_trust_files(
         NetworkId::from_passphrase(ozpb_domain::TESTNET_PASSPHRASE),
         3,
     )
     .unwrap();
-    assert_eq!(
-        regenerated, text,
-        "version 3 no longer serializes to its published bytes"
-    );
     let signed: SignedSnapshot = serde_json::from_str(text).unwrap();
-    assert!(signed.snapshot.target_adapters.is_empty());
     assert_eq!(
-        serde_json::to_value(&signed).unwrap(),
-        serde_json::from_str::<serde_json::Value>(text).unwrap()
+        serde_json::from_str::<serde_json::Value>(&regenerated).unwrap(),
+        with_wide_strings(text),
+        "version 3 now regenerates more than a change of integer spelling"
     );
+    assert!(signed.snapshot.target_adapters.is_empty());
     let mut registry = Registry::with_pinned_roots(RootPolicy {
         threshold: 1,
         keys: BTreeMap::from([("legacy".into(), dev::dev_root_verifying_bytes())]),
@@ -205,8 +226,12 @@ fn adapters_cannot_alias_other_code_roles_or_malformed_hashes() {
 fn v5_extends_v4_without_reinterpreting_its_deadline() {
     let text = include_str!("published-v4.signed.json");
     let network = NetworkId::from_passphrase(ozpb_domain::TESTNET_PASSPHRASE);
-    assert_eq!(dev::dev_trust_files(network, 4).unwrap().0, text);
     let old: SignedSnapshot = serde_json::from_str(text).unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&dev::dev_trust_files(network, 4).unwrap().0)
+            .unwrap(),
+        with_wide_strings(text)
+    );
     let new = sign_snapshot(
         &dev::dev_signing_key(),
         dev::soroswap_deadline_successor(network).unwrap(),
