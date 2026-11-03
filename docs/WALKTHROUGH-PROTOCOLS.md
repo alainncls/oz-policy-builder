@@ -1,6 +1,7 @@
-> Current W3 uses adapter v2 and registry v5 with an exact recorded deadline. Earlier
-> receipts and the v1/set-3 descriptions below remain historical evidence of their original
-> open-deadline permission; they are not relabeled as passing the new deadline checks.
+> Current W3 uses adapter v2 and registry v5 with an exact recorded deadline. Its first live
+> run passed on 30 October 2026 ([section 17 of the testnet evidence](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)).
+> Earlier receipts and the v1/set-3 descriptions below remain historical evidence of their
+> original open-deadline permission; they are not relabeled as passing the new deadline checks.
 
 # Protocol walkthroughs: W3 Soroswap and W1 Blend
 
@@ -22,12 +23,23 @@ controls remain. The adapter binding is a
 development-registry assertion, and the router's Wasm was not reproduced from source
 ([target adapters](TARGET-ADAPTERS.md#reproduction-attempt)). A controlled run on 26 October completed all 19 controls with the historical v1 binding and ten verified
 derived denials ([section 14](TESTNET-EVIDENCE-TRANCHE-2.md#14-controlled-soroswap-adapter-run-26-october-2026)).
+A controlled run on 30 October 2026, the first through the v2 binding, completed all 20 controls
+and twelve verified derived denials; the deadline-plus-one and maximum-deadline controls and
+derived cases each returned the router-rule policy's `#6`
+([section 17](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)).
+A run on 1 November 2026 at revision `86854cee` repeated that result
+([section 23](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026)).
 W1 is executable through `run.sh`: it opens the bounded USDC supply its claim is earned on and
 withdraws it before the keys are discarded (see [W1](#w1-blend)). A controlled run on 21 October
 2026 completed every W1 step after four stopped attempts
 ([section 10 of the testnet evidence](TESTNET-EVIDENCE-TRANCHE-2.md#10-controlled-blend-claim-run-21-october-2026)).
 A run on 22 October 2026 repeated every W1 step with the [derived denials](#derived-denials) and
 passed ([section 12](TESTNET-EVIDENCE-TRANCHE-2.md#12-controlled-blend-claim-run-with-derived-denials-22-october-2026)).
+A run on 30 October 2026 repeated every W1 step, including the account-Wasm report below, and
+passed with five derived denials
+([section 19](TESTNET-EVIDENCE-TRANCHE-2.md#19-controlled-blend-claim-run-30-october-2026)).
+A run on 1 November 2026 at revision `86854cee` passed the same way
+([section 21](TESTNET-EVIDENCE-TRANCHE-2.md#21-controlled-blend-claim-run-1-november-2026)).
 
 ## Offline account-Wasm reports before installation
 
@@ -55,8 +67,12 @@ inventory. Stderr is not retained. Retry uses a fresh run directory. Only when e
 passes is `account-dry-runs.json` written. The public evidence summary selects typed counts and identities and
 hashes the complete reports. Captured-target and live-enforcement layers remain unavailable in
 these offline reports, and `complete` remains false. Later live derived-denial simulations are
-reported separately. Existing published October runs predate this additional gate; they do not
-supply its execution evidence. W2's composed policy is outside this worker's supported scope.
+reported separately. The 20–26 October runs predate this additional gate; they do not supply
+its execution evidence. The 30 October W3 and W1 runs passed it before installation
+([sections 17](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)
+and [19](TESTNET-EVIDENCE-TRANCHE-2.md#19-controlled-blend-claim-run-30-october-2026) of the
+testnet evidence), and so did the 1 November W1 and W3 runs ([sections 21](TESTNET-EVIDENCE-TRANCHE-2.md#21-controlled-blend-claim-run-1-november-2026)
+and [23](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026)). W2's composed policy is outside this worker's supported scope.
 
 For the offline integration check, set `OZPB_BIN`, `OZPB_NATIVE_WORKER` and `OZPB_ACCOUNT_WASM`
 to trusted binaries and the pinned Wasm, then run
@@ -191,7 +207,10 @@ before authorization. It stays offline with the other listed classes. So do the 
 which moves the authorization off the account, and the suite's undeployed contract and absent
 function, which have no live equivalent here. The historical v1 adapter left the deadline open, so its suite had no deadline denial;
 those cases expected a permit and were not replayed. Current v2 derives denials for
-deadline-plus-one and the maximum u64 value. The
+deadline-plus-one and the maximum u64 value; the
+[30 October run](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)
+replayed both live, refused by the router-rule policy (`#6`), and the
+[1 November run](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026) again. The
 section 13 run predates the adapter and replayed the same ten denials against an exact deadline.
 The [section 14 run](TESTNET-EVIDENCE-TRANCHE-2.md#14-controlled-soroswap-adapter-run-26-october-2026)
 uses the adapter-bound 64-case suite and reports the open deadline as a disclosed permission.
@@ -204,6 +223,11 @@ reported ledgers; nothing is submitted. The hand-written controls below do not c
 five. **Status:** both passed live on 22 October 2026: W1 at exactly the minimum of five denials
 ([section 12 of the testnet evidence](TESTNET-EVIDENCE-TRANCHE-2.md#12-controlled-blend-claim-run-with-derived-denials-22-october-2026)),
 W3 with ten ([section 13](TESTNET-EVIDENCE-TRANCHE-2.md#13-controlled-soroswap-swap-run-with-derived-denials-22-october-2026)).
+Both passed again on 30 October 2026 at revision `60e1da70`: W3 through the v2 adapter with
+twelve ([section 17](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)),
+W1 again at exactly five ([section 19](TESTNET-EVIDENCE-TRANCHE-2.md#19-controlled-blend-claim-run-30-october-2026)).
+Both passed with the same counts on 1 November 2026 at revision `86854cee`
+([sections 23](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026) and [21](TESTNET-EVIDENCE-TRANCHE-2.md#21-controlled-blend-claim-run-1-november-2026)).
 
 ### Required observations
 
@@ -326,8 +350,9 @@ transaction, the amount gulped and the new expiration. Otherwise it sends nothin
 `not_needed`. A missing or zero schedule, a gulp the pool refuses, or a schedule still not live
 afterwards stops the run with that reason. The preflight copies the refresh into the plan.
 A read-only simulation of `gulp_emissions` on 21 October 2026 was refused (`#1200`,
-`BadRequest`), so a run after the current schedule ends (26 October 2026, 04:23 UTC, refused by
-the preflight from about 02:23) may not be able to refresh it.
+`BadRequest`). The schedule then live ended on 26 October and was later renewed outside this
+harness. On 30 October the schedule on ID 3 ran until 2 November 2026, 04:23:17 UTC, so the
+preflight refuses from about 02:23 that day; a run after it ends may not be able to refresh it.
 
 ### The position
 
@@ -365,8 +390,9 @@ withdrawal or supply whose outcome is unknown, or an unexpected position is reco
 remain open.
 
 What the run leaves on its throwaway account is not recovered or recorded: the swap output
-beyond the supplied 10 USDC (about 11 USDC at the 21 October quote), the withdrawn USDC and the
-claimed BLND. Each run therefore takes about 21 USDC out of the testnet pair.
+beyond the supplied 10 USDC, the withdrawn USDC and the claimed BLND. Each run therefore takes
+its whole swap output out of the testnet pair: about 21 USDC at the 21 October quote, about
+165 USDC at the 30 October one.
 
 A zero-reward claim or a mocked pool is not a substitute for any of this.
 

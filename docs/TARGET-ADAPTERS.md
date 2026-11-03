@@ -62,7 +62,11 @@ it is never refreshed during synthesis. The harness rejects a widened or changed
 including an explicit user any-value override, even though generic synthesis supports such
 high-blast-radius decisions. Deadline-plus-one and `u64::MAX` are simulation-only denials
 attributed to the router rule's policy (`#6`). Current evidence uses control set 4; historical
-v1/set-3 open-deadline evidence keeps its original permit interpretation.
+v1/set-3 open-deadline evidence keeps its original permit interpretation. The first live run
+through this binding, on 30 October 2026, observed both deadline denials with that code, as
+controls and as derived suite cases
+([testnet evidence, section 17](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)),
+and the 1 November 2026 run at `86854cee` did again ([section 23](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026)).
 
 The call cap remains separately configured. The live demonstration uses one successful call
 per rule to keep its spend small; the library's synthetic W3 fixture uses ten. Neither value

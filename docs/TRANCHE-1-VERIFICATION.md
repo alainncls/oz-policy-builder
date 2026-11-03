@@ -146,7 +146,7 @@ runs on a macOS arm64 runner for this reason.
 
 Passing the checks above verifies the Tranche 1 record-and-generate milestone. It does not
 claim the Tranche 2 dry-run report, agent skill, wallet install flow, hosted endpoint, or three
-integration walkthroughs. It also does not claim the Tranche 3 production service, independent
+integration walkthroughs. It also does not claim the Tranche 3 production versioned release, independent
 security audit, audit remediation, OpenZeppelin sign-off, or mainnet wallet integration.
 
 Those boundaries are normative in `README.md`, `SECURITY.md`, and `docs/SCOPE.md`. Historical
