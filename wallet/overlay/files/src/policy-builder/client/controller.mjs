@@ -15,12 +15,12 @@ const LAYERS = ['reference', 'account_wasm', 'captured_target', 'live_enforcemen
 
 /** The route supplies the real validators; only serialized XDR crosses SDK versions. */
 export class WalletController {
-  #request; #validators; #sign; #origin; #pins; #notify; #pause; #busy = false;
+  #request; #validators; #sign; #origin; #pins; #notify; #pause; #busy = false; #agentEpoch = 0;
   #state = copy({ status: null, wallet: null, record: null, artifact: null, deployment: null,
     review: null, accountPreview: null, deployPreview: null, installation: null, receipt: null,
     sample: null, samplePreview: null, sampleTransactionHash: null, sampleAttempted: false, delegate: null, livePreview: null,
     replay: null, installPreview: null, installAttempted: false, installRuleId: null, revokePreview: null, revokeAttempted: false,
-    removal: null, monitor: null, replacementPreview: null, replacementPending: null, replacement: null, installOwner: null, proposalReview: null, busy: false });
+    removal: null, monitor: null, replacementPreview: null, replacementPending: null, replacement: null, installOwner: null, proposalReview: null, agent: null, agentStale: null, busy: false });
   constructor({ request, validators, sign, origin, pins, onChange = () => {},
     pause = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); }) }) {
     this.#request = request; this.#validators = validators; this.#sign = sign;
@@ -79,20 +79,41 @@ export class WalletController {
     return null;
   }
   async connect() {
-    return this.#act(() => this.#status());
+    return this.#act(async () => {
+      const status = await this.#status();
+      if (status.capabilities?.agentHandoff === true && !this.#state.agent) await this.#staleAgent();
+      return status;
+    });
+  }
+  /** A reopened page cannot review a draft for a delegate it no longer holds; it can only end that connection. */
+  async #staleAgent() {
+    const epoch = this.#agentEpoch;
+    let inbox;
+    try { inbox = await this.#request('agent-inbox', {}); } catch { return; }
+    // A slow read cannot bring back a connection the user has since ended or replaced.
+    if (epoch !== this.#agentEpoch || this.#state.agent) return;
+    const c = inbox?.connection ?? null;
+    const connection = c && typeof c.account === 'string' && typeof c.delegate === 'string'
+      && c.networkId === this.#pins.networkId && Number.isSafeInteger(c.expiresInSeconds)
+      && c.expiresInSeconds >= 1 && c.expiresInSeconds <= 1800
+      ? { account: c.account, delegate: c.delegate, expiresInSeconds: c.expiresInSeconds } : null;
+    const pairingPending = inbox?.pairingPending === true;
+    this.#set({ agentStale: connection || pairingPending
+      ? { pairingPending, connection, pending: connection !== null && inbox?.pending != null } : null });
   }
   /** Read the backend's status again, adopting an installation it confirmed after a lost response. */
   async refreshStatus() {
     return this.#act(() => this.#status());
   }
   attachWallet(wallet) {
-    if (this.#busy || !wallet || ['contractId', 'credentialId', 'publicKey', 'verifier']
+    if (this.#busy || this.#state.agent || !wallet || ['contractId', 'credentialId', 'publicKey', 'verifier']
       .some((key) => typeof wallet[key] !== 'string' || !wallet[key].length || wallet[key].length > 2048)) throw refused();
     if (!sameWallet(this.#state.wallet, wallet)) this.#clearLifecycle();
     this.#clear(); this.#clearSample(); this.#set({ wallet });
   }
   async prepareAccount(credential) {
     return this.#act(async () => {
+      if (this.#state.agent) throw refused();
       this.#clear();
       this.#clearSample();
       const result = await this.#request('prepare-account', credential);
@@ -104,6 +125,7 @@ export class WalletController {
   }
   async confirmAccount() {
     return this.#act(async () => {
+      if (this.#state.agent) throw refused();
       const preview = this.#state.accountPreview;
       this.#set({ accountPreview: null });
       if (!preview) throw refused();
@@ -183,6 +205,88 @@ export class WalletController {
       this.#set({ record: result.record, artifact: result.artifact, proposalReview: review });
     });
   }
+  async connectAgent() {
+    return this.#act(async () => {
+      this.#capability('agentHandoff');
+      this.#agentEpoch++;
+      const wallet = this.#state.wallet;
+      if (!wallet) throw refused();
+      let delegate = this.#state.delegate;
+      if (!delegate) {
+        // A reloaded page no longer holds the old delegate capability. The owner's
+        // explicit Connect action revokes any prior draft connection before rotating it.
+        const disconnected = await this.#request('disconnect-agent', {});
+        if (disconnected?.disconnected !== true) throw refused();
+        this.#set({ agent: null, agentStale: null });
+        const result = await this.#request('create-delegate', {});
+        if (!HASH.test(result?.capabilityId) || !/^G[A-Z2-7]{55}$/.test(result.address ?? '')) throw refused();
+        delegate = { capabilityId: result.capabilityId, address: result.address }; this.#set({ delegate });
+      }
+      const paired = await this.#request('pair-agent', { wallet, delegate });
+      if (!/^ozpb-pair-[0-9a-f]{64}$/.test(paired?.pairingCode ?? '') || paired.account !== wallet.contractId
+        || paired.delegate !== delegate.address || paired.expiresInSeconds !== 300) throw refused();
+      this.#set({ agent: { pairingCode: paired.pairingCode, connection: null, pending: null }, agentStale: null });
+    });
+  }
+  async refreshAgentInbox() {
+    if (this.#busy) return;
+    if (!this.#state.agent) { if (this.#state.agentStale) await this.#staleAgent(); return; }
+    const epoch = this.#agentEpoch;
+    const result = await this.#request('agent-inbox', {});
+    // A slow poll cannot resurrect a connection after a user disconnected or re-paired.
+    if (this.#busy || !this.#state.agent || epoch !== this.#agentEpoch) return;
+    const connection = result?.connection;
+    if (!connection) {
+      if (result?.pending !== null || typeof result?.pairingPending !== 'boolean') throw refused();
+      if (!result.pairingPending) this.#set({ agent: null });
+      return;
+    }
+    if (connection.account !== this.#state.wallet?.contractId || connection.delegate !== this.#state.delegate?.address
+      || connection.networkId !== this.#pins.networkId || !HASH.test(connection.connectionId)
+      || !Number.isSafeInteger(connection.expiresInSeconds) || connection.expiresInSeconds < 1 || connection.expiresInSeconds > 1800) throw refused();
+    if (result.pending) {
+      if (!HASH.test(result.pending.deliveryId)) throw refused();
+      const proposal = this.#validators.parseGrantProposal(result.pending.proposal, connection.account);
+      if (proposal.decisions.delegate !== connection.delegate) throw refused();
+    }
+    this.#set({ agent: { pairingCode: null, connection, pending: result.pending ?? null } });
+  }
+  async disconnectAgent() {
+    return this.#act(async () => {
+      this.#agentEpoch++;
+      const result = await this.#request('disconnect-agent', {});
+      if (result?.disconnected !== true) throw refused();
+      this.#set({ agent: null, agentStale: null });
+    });
+  }
+  async dismissAgentProposal() {
+    return this.#act(async () => {
+      this.#agentEpoch++;
+      const agent = this.#state.agent;
+      if (!agent?.pending) throw refused();
+      const result = await this.#request('dismiss-agent-proposal', { deliveryId: agent.pending.deliveryId });
+      if (result?.dismissed !== true) throw refused();
+      this.#set({ agent: { ...agent, pending: null } });
+    });
+  }
+  async reviewAgentProposal() {
+    return this.#act(async () => {
+      this.#agentEpoch++;
+      const agent = this.#state.agent, wallet = this.#state.wallet, delegate = this.#state.delegate;
+      if (!agent?.pending || !wallet || !delegate || agent.connection?.account !== wallet.contractId
+        || agent.connection?.delegate !== delegate.address) throw refused();
+      const proposal = this.#validators.parseGrantProposal(agent.pending.proposal, wallet.contractId);
+      if (proposal.decisions.delegate !== delegate.address) throw refused();
+      this.#set({ agent: { ...agent, pending: null } });
+      this.#clear();
+      const result = await this.#request('review-agent-proposal', { deliveryId: agent.pending.deliveryId, wallet, delegate });
+      if (!HASH.test(result.record?.recordId) || result.record.transactionHash !== proposal.transaction_hash
+        || result.record.accountAddress !== wallet.contractId) throw refused();
+      const review = this.#validators.checkProposalArtifact(proposal, result.artifact);
+      if (Object.keys(review).some(key => result.proposalReview?.[key] !== review[key])) throw refused();
+      this.#set({ record: result.record, artifact: result.artifact, proposalReview: review });
+    });
+  }
   async generate(parameters) {
     return this.#act(async () => {
       this.#capability('generate');
@@ -242,6 +346,7 @@ export class WalletController {
   /** A backend-held automation delegate for the local and live checks; it never replaces the owner passkey. */
   async createDelegate() {
     return this.#act(async () => {
+      if (this.#state.agent) throw refused();
       const capabilities = this.#state.status?.capabilities;
       if (capabilities?.accountCheck !== true && capabilities?.liveCheck !== true) throw refused();
       const result = await this.#request('create-delegate', {});

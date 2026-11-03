@@ -237,6 +237,23 @@ function PolicyBuilder() {
       setMessage("Session unavailable. Open a fresh local launcher session.");
     }
   }, []);
+  const agentActive = Boolean(state?.agent);
+  // A connection made before this page was opened is followed too, until it ends.
+  const agentWatched = agentActive || Boolean(state?.agentStale);
+  useEffect(() => {
+    if (!agentWatched) return;
+    let stopped = false, polling = false;
+    const poll = async () => {
+      if (stopped || polling) return;
+      polling = true;
+      try { await controller.current?.refreshAgentInbox(); }
+      catch { if (!stopped) setMessage("Claude connection could not refresh. Reconnect if it remains unavailable."); }
+      finally { polling = false; }
+    };
+    const timer = window.setInterval(() => void poll(), 2000);
+    void poll();
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [agentWatched]);
   useEffect(() => {
     setTransactionHash(state?.sampleTransactionHash ?? "");
   }, [state?.sampleTransactionHash, state?.wallet?.contractId]);
@@ -251,7 +268,7 @@ function PolicyBuilder() {
     catch { setMessage("Action refused. Refresh the evidence and review again."); }
   };
   const create = async () => {
-    if (busy || creatingRef.current || !controller.current) return;
+    if (busy || creatingRef.current || !controller.current || state?.agent) return;
     creatingRef.current = true;
     setCreating(true);
     setMessage("Create the owner passkey. Account deployment requires a separate confirmation.");
@@ -289,22 +306,61 @@ function PolicyBuilder() {
         <h2 id="wallet-heading" className="text-xl font-semibold">1. Choose the recognized account</h2>
         <p className="text-sm text-slate-300">This integration requires the reviewed account and verifier code shown below.
           Existing wallets with different code are refused.</p>
-        <button className={button} disabled={busy} onClick={() => void create()}>Create owner passkey and preview account</button>
+        <button className={button} disabled={busy || agentActive} onClick={() => void create()}>Create owner passkey and preview account</button>
         {state?.accountPreview && <p className="rounded-lg border border-cyan-700 p-3 text-sm">
           The new account receives {xlm(object(state.accountPreview.summary).sampleFundingStroops)} for the sample transaction.
           {" "}Maximum total deployment and funding fees: {xlm(object(state.accountPreview.summary).maxTotalFeeStroops)}.
           {" "}These funds come from the local testnet fee payer.
         </p>}
         <Evidence title="Account deployment preview" value={state?.accountPreview} open />
-        {state?.accountPreview && <button className={button} disabled={busy}
+        {state?.accountPreview && <button className={button} disabled={busy || agentActive}
           onClick={() => void run((value) => value.confirmAccount())}>Confirm testnet account deployment</button>}
         <details><summary className="cursor-pointer">Attach an existing recognized wallet</summary>
           <label className="mt-3 block text-sm" htmlFor="wallet-locator">Public wallet locator JSON: contractId, credentialId, publicKey, verifier</label>
           <textarea id="wallet-locator" className={input} rows={4} value={walletJson}
             onChange={(event) => setWalletJson(event.target.value)} />
-          <button className={button} disabled={busy || !walletJson} onClick={() => void attach()}>Use this wallet locator</button>
+          <button className={button} disabled={busy || agentActive || !walletJson} onClick={() => void attach()}>Use this wallet locator</button>
         </details>
         <Evidence title="Current public wallet locator — retain it to reconnect" value={state?.wallet} open />
+      </section>
+      <section className={panel} aria-labelledby="agent-heading">
+        <h2 id="agent-heading" className="text-xl font-semibold">Connect Claude</h2>
+        <p className="text-sm text-slate-300">For Claude and this wallet running on the same computer.
+          Connect once to receive proposed permissions here. You review the proposal before the wallet checks it,
+          and approve installation separately with your passkey.</p>
+        <button className={button} disabled={busy || !state?.wallet || !state?.status?.capabilities.agentHandoff
+          || (!state?.delegate && !state?.status?.capabilities.accountCheck && !state?.status?.capabilities.liveCheck)}
+          onClick={() => void run(value => value.connectAgent())}>{agentActive ? "Reconnect Claude" : "Connect Claude"}</button>
+        {(state?.agent || state?.agentStale) && <button className={button} disabled={busy}
+          onClick={() => void run(value => value.disconnectAgent())}>Disconnect Claude</button>}
+        {state?.agentStale && <p className="rounded-lg border border-amber-600 p-3 text-sm" role="status">
+          {state.agentStale.connection
+            ? `Claude is still connected from before this page was opened, for up to ${Math.ceil(state.agentStale.connection.expiresInSeconds / 60)} more minutes.`
+            : "A pairing code from before this page was opened is still valid; if Claude uses it, this page cannot review what it sends."}
+          {state.agentStale.pending && " A proposal it sent is waiting, but this page cannot review it."}
+          {" "}Disconnect Claude to end it. Connect Claude replaces it with a new automation
+          delegate, so Claude must build the grant again for that delegate.
+        </p>}
+        {state?.agent?.pairingCode && <div className="space-y-3 rounded-lg border border-cyan-700 p-4">
+          <p>Paste this one-time code into Claude and ask it to connect your wallet. It expires in five minutes.</p>
+          <code className="block break-all select-all text-sm">{state.agent.pairingCode}</code>
+          <button className={button} onClick={() => void navigator.clipboard.writeText(state.agent!.pairingCode!)}>
+            Copy pairing code</button>
+        </div>}
+        {state?.agent?.connection && <p className="text-sm text-cyan-200">
+          Claude is connected for up to {Math.ceil(state.agent.connection.expiresInSeconds / 60)} more minutes.
+          Keep this page open until you review Claude's proposal, and review it within five minutes of its
+          arrival: reopening the page needs a new connection, and Claude must then build the grant again.
+          Use Disconnect Claude to end it; closing this page does not guarantee disconnection.
+        </p>}
+        {state?.agent?.pending && <div className="space-y-3 rounded-lg border border-amber-600 p-4" role="status">
+          <p>A proposal from Claude is ready for review. Its permissions have not been verified yet.</p>
+          <button className={button} disabled={busy} onClick={() => void run(value => value.reviewAgentProposal())}>
+            Review proposal from Claude</button>
+          <button className={button} disabled={busy} onClick={() => void run(value => value.dismissAgentProposal())}>
+            Dismiss proposal</button>
+        </div>}
+        {agentActive && <p className="text-sm text-slate-300">Disconnect before changing the wallet account or automation delegate.</p>}
       </section>
       <section className={panel} aria-labelledby="record-heading">
         <h2 id="record-heading" className="text-xl font-semibold">2. Record and generate</h2>

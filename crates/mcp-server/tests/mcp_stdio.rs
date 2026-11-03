@@ -33,7 +33,8 @@ fn initialize_and_list_tools() {
             + PREFLIGHT_TOOLS.len()
             + AUTHORITY_TOOLS.len()
             + POLICY_CHECK_TOOLS.len()
-            + CAPTURE_TOOLS.len(),
+            + CAPTURE_TOOLS.len()
+            + WALLET_HANDOFF_TOOLS.len(),
         "tool set drifted; have {names:?}"
     );
     assert!(

@@ -108,9 +108,17 @@ verdict and target code identity, all four dry-run layers with their status, and
 list or why it has not been read. It then waits for a reply that is just `confirm`. A later
 synthesis or a new authority or dry-run result needs a new card and a new confirmation.
 
-The handoff is a separate skill, `/oz-policy-builder:policy-builder-install`, which only the
-user can start: its `disable-model-invocation: true` keeps the agent from invoking it. It
-checks that the current grant was confirmed and then prints one of two things:
+For the supported same-machine wallet flow, select **Connect Claude** in the wallet and give
+Claude its one-time pairing code. After the full final card is confirmed, the skill calls
+`send_wallet_proposal`, and Claude Code asks the user to approve that call; neither the plugin
+nor the skill pre-approves it. A visible unverified draft arrives in the wallet, where
+the user selects Review before independent import and the existing checks and passkey approval.
+No extra install-skill invocation or proposal JSON copying is required. See
+[Direct local handoff](AGENT-WALLET-HANDOFF.md); remote hosted MCP cannot reach a user's wallet.
+
+The manual fallback is `/oz-policy-builder:policy-builder-install`, which only the user starts.
+Its `disable-model-invocation: true` keeps the agent from invoking that fallback itself. It
+checks that the current grant was confirmed and prints one of two things:
 
 - **An `ozpb-grant-proposal/v1` document**, for a grant of the shape the wallet integration
   supports (recorded from the wallet account's confirmed testnet transaction; one rule, one
@@ -126,8 +134,8 @@ checks that the current grant was confirmed and then prints one of two things:
   treats it as untrusted: record the transaction again by hash through its own RPC,
   synthesize again with its own toolchain from its own decisions document, refuse any projection
   difference, widening or spending limit, and show the delegate, expiry and cap for approval.
-  Spec hashes are shown, not required to match. The skill's text is the exact field-by-field
-  definition, and `scripts/check-agent-transcript.py` checks a printed proposal against the tool
+  Spec hashes are shown, not required to match. The shared skill reference `skills/policy-builder/references/wallet-proposal.md` is the exact
+  field-by-field definition, and `scripts/check-agent-transcript.py` checks a printed proposal against the tool
   calls it came from. The local wallet accepts the supported native-XLM transfer subset through
   [Import a grant proposal](POLLYWALLET-INTEGRATION.md#importing-an-agent-proposal).
   Its execution checks require the delegate held by that backend session.
@@ -367,16 +375,16 @@ Every command on this page was run to write it, and the outputs are pasted from 
 
 ## What this does not show
 
-No policy is installed and nothing is signed here. The complete permit/deny dry-run report,
-wallet install flow, and a deployed hosted endpoint are scheduled work; self-hosting is
-covered in [`docs/SELF-HOSTING.md`](SELF-HOSTING.md). `evaluate_spec` is the reference
+No policy is installed and nothing is signed by MCP. The wallet performs its own supported
+execution checks and installation approval; a deployed hosted endpoint needs separate operational
+evidence. Self-hosting is covered in [`docs/SELF-HOSTING.md`](SELF-HOSTING.md). `evaluate_spec` is the reference
 evaluator answering about a spec —
 not a smart account executing a policy, which is a different and stronger claim that belongs
 with the harness.
 
 The `policy-builder` skill guides the available tools through an artifact and evidence
 summary and, once the policies are deployed, the advisory authority check, install intent and
-dry-run preparation, then asks for confirmation; the install skill hands the confirmed grant
-off. Neither signs or installs. Its layer-1 reference suite is not the full contract/live dry
-run. The complete dry-run report, wallet install flow and proposal import, and a deployed
-hosted endpoint remain scheduled work.
+dry-run preparation, then asks for confirmation. The paired local path delivers a draft directly;
+the human-invoked install skill remains the manual fallback. Neither signs or installs. Its
+layer-1 reference suite is not the full contract/live dry run, and draft delivery is not wallet
+approval. See the wallet integration guide for the implemented installation and execution scope.

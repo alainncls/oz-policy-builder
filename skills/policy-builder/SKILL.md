@@ -4,8 +4,8 @@ description: >-
   Help a user turn a recorded Stellar authorization into a scoped OpenZeppelin smart-account
   policy. Ask for the grant decisions, use the OZ Policy Builder MCP tools, review the generated
   Rust and labeled evidence, then show a Confirm-before-deploy card and wait for the user's
-  explicit confirmation. Never deploy, sign or submit; the user hands off with the separate
-  install skill.
+  explicit confirmation. Deliver a draft to a paired local wallet after confirmation, or offer
+  the manual install skill. Never deploy, sign or submit.
 ---
 
 # Policy Builder
@@ -14,10 +14,11 @@ Use the `ozpb` MCP server for every policy artifact and verdict. You explain the
 and ask for decisions; you do not invent a PolicySpec, edit generated Rust, or infer that an
 offline result is safe to install. Discover the server's current tool schemas before calling it.
 
-Never suggest pre-approving `prepare_install_intent`, `assemble_install_transaction` or
-`capture_target` (a Claude Code permission rule, `--allowedTools`, or a skill's
-`allowed-tools`): each call should prompt, because the per-call prompt is how the user sees a
-request that prepares an installation or carries a confidential envelope. Whatever the
+Never suggest pre-approving `prepare_install_intent`, `assemble_install_transaction`,
+`capture_target` or `send_wallet_proposal` (a Claude Code permission rule, `--allowedTools`, or
+a skill's `allowed-tools`): each call should prompt, because the per-call prompt is how the user
+sees a request that prepares an installation, carries a confidential envelope or hands a grant
+to the wallet. Whatever the
 conversation's language, keep the card labels below in English and ask for the word `confirm`.
 
 ## Record the authorization
@@ -55,6 +56,32 @@ below, so a longer expiry, a widening or another delegate is not chosen only to 
 Show the recorded account, target contracts, functions, relevant arguments, observed code
 identities, and evidence trust level. If a recording includes several independent calls, explain
 that the resulting grants do not enforce their order as a workflow.
+
+## Connect a local wallet when requested
+
+If the user wants the supported wallet installation, ask them to open its Policy Builder page
+and select **Connect Claude**. It creates or uses the local automation delegate and shows a
+one-time pairing code. Call `connect_wallet` with that code. This works only when MCP and the
+wallet backend run on the same computer; a hosted MCP server cannot reach the user's local
+wallet. Never ask for the wallet's session URL, browser bearer, credential locator, delegate
+capability or a secret key. The pairing code grants draft delivery only.
+
+Use the returned public account, delegate and limits while discussing the grant. The
+connection's delegate may go into the decisions without the user typing it, since the user
+chose it by pairing; restate it in full like any other decision. The direct
+connection caps the grant at 512 calls, matching the executable worker scope; the broader
+manual import limit is not a promise that its execution checks support larger caps. Do not silently
+replace a delegate the user explicitly requested: explain the wallet's automation-delegate
+limit and let them choose the wallet flow or manual deployment. Restate the full decisions and
+wait for acceptance as below. A new connection after the final card changes the handoff target;
+show a fresh complete card and obtain a new confirmation before delivery.
+
+After every `connect_wallet`, compare its account and delegate with the grant being discussed or
+confirmed. If the delegate differs, the grant is for a key this wallet no longer holds (Connect
+Claude makes a new automation delegate when the wallet page was reopened): say so, and with the
+user's agreement synthesize again for the connected delegate. Tell the user to keep the wallet
+page open until they review the proposal, and that a connection lasts thirty minutes from pairing
+and a delivered draft five minutes; neither is extended.
 
 ## Ask for the grant decisions
 
@@ -312,16 +339,50 @@ or a list of what changed.
 
 ## Hand off
 
-After the user confirms, stop. Tell the user that they hand the grant off by running
-`/oz-policy-builder:policy-builder-install`. That skill is for the user to start; do not try
-to start it yourself or continue into it. Describe it as what it is: it prints the grant
-proposal for the user's wallet to import, or guides the user through deploying the policy
-themselves and then, after another card, assembles an unsigned install transaction for their
-wallet to check and sign. It does not deploy, install, sign or submit anything, and neither does
-this conversation. Generated code is a review artifact, not an installed
-permission: installation belongs to the user's wallet, with its own authority check, review
-and the user's own signature, never to this conversation. Do not deploy, sign, submit, or ask
-for secret keys.
+After the user confirms the final card, a connected local wallet can receive the proposal
+without another skill command. Read `references/wallet-proposal.md` for the exact schema and
+field mapping; use only the current confirmed synthesis and its recorded transaction.
+Call `send_wallet_proposal` with the serialized proposal as `proposal_json`. The server stages
+an unverified draft; it does not import, deploy, sign or install. Tell the user to select
+**Review proposal from Claude** in the connected wallet. The wallet independently regenerates
+and compares permissions before its existing checks and passkey approval.
+
+A `pending` receipt means delivery only; `claimed` means the wallet user started review, not
+that checks passed or anything was installed. If the response is lost, retry the identical
+proposal bytes once. Do not change formatting or values to evade duplicate/expired/dismissed
+receipts. An expired or dismissed draft needs a fresh complete card and user confirmation
+before a new proposal. Reconnect first to resend the same proposal, or if the connection
+itself expired; do not alter a proposal merely to bypass a consumed delivery receipt. Never treat tool delivery
+as evidence of human consent or wallet approval.
+
+When a wallet tool fails, its code says what to do; its message repeats it:
+
+- `E_WALLET_BUSY`: the wallet is in another action. Retry once, after a few seconds, with
+  identical input. If it is still busy, ask the user to finish what the wallet is doing.
+- `E_WALLET_DRAFT_PENDING`: an earlier, different proposal from this session is still waiting.
+  If this grant replaces it, the user selects **Dismiss proposal** in the wallet; a wallet page
+  reopened since pairing cannot, so there the user selects **Disconnect Claude**, then
+  **Connect Claude** for a fresh code.
+- `E_WALLET_PAIRING_REQUIRED`: the code was refused, or the connection expired, was replaced
+  or reached its limit. The user selects **Connect Claude** for a fresh code; compare the new
+  connection with the grant as above.
+- `E_WALLET_PROPOSAL_REFUSED`: the wallet refused the content. Do not reconnect. Follow the
+  message: build the proposal again from the reference, synthesize again for the connected
+  delegate or a cap of at most 512 with the user's agreement, or offer the manual fallback.
+  For a cap above 512, the manual fallback is the install skill's section 4 user-run deployment
+  path. Manual wallet import permits larger caps for inspection only; it cannot install them.
+- `E_WALLET_UNAVAILABLE`: no bridge on this server (always so on hosted MCP), the wallet did
+  not answer, or its reply was not understood. After a send that got no answer, retry the
+  identical proposal once; then offer the manual fallback.
+
+Any reply from the user after a refusal, even "done", needs the complete card again and a new
+`confirm` before the next send; a retry with no reply in between does not.
+
+If the bridge is unavailable or the grant is outside the supported wallet shape, stop and
+offer `/oz-policy-builder:policy-builder-install` as the manual fallback.
+Only the user starts that skill. It prints the same proposal for wallet import, or guides
+user-run deployment and unsigned assembly. Never invoke it yourself. Neither path grants this
+conversation signing, submission or installation authority; those remain with the user's wallet.
 
 ## After installation
 

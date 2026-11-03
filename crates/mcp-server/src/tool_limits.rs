@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 /// Tools that build or read an RPC endpoint, limited to at most 4 calls a minute by default.
-const HEAVY: [&str; 11] = [
+const HEAVY: [&str; 13] = [
     "generate_code",
     "verify",
     "prepare_dry_run",
@@ -16,6 +16,8 @@ const HEAVY: [&str; 11] = [
     "assemble_install_transaction",
     "check_against_policy",
     "capture_target",
+    "connect_wallet",
+    "send_wallet_proposal",
 ];
 /// Pure tools: bounded by their own size limits and the ordinary per-tool default.
 #[cfg(test)]

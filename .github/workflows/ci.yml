@@ -113,7 +113,7 @@ jobs:
           package-manager-cache: false
       # Installer identity tests use the real canonical validator, with mocked RPC and keys.
       - name: build the local CLI
-        run: cargo build --locked -p ozpb-cli
+        run: cargo build --locked -p ozpb-cli -p ozpb-mcp-server
       - name: install locked Node dependencies
         run: |
           npm ci --prefix testnet-harness/scripts --no-audit --no-fund
@@ -122,6 +122,7 @@ jobs:
       - name: offline harness suites (no browser launch or testnet access)
         env:
           OZPB_BIN: ${{ github.workspace }}/target/debug/ozpb
+          OZPB_MCP_BIN: ${{ github.workspace }}/target/debug/ozpb-mcp-server
           CARGO_NET_OFFLINE: 'true'
         run: |
           npm test --prefix testnet-harness/scripts
