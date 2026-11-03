@@ -24,8 +24,12 @@ bash testnet-harness/run.sh
 ```
 
 `OZPB_SUBSCRIPTION_POLICY=deploy` creates an isolated instance of the exact reviewed Wasm
-named by the committed signed development registry. That Wasm must be live on the configured
-testnet; absent or expired code requires an explicit operator upload/restoration first. An
+named by the committed signed development registry. That Wasm must be on the configured
+testnet; absent code requires an explicit operator upload first. On 30 October 2026 the code
+entry was archived, and the instance creation restored it under the default one-XLM fee
+ceiling with a 1.2% margin; the restored entry stays live until about 6 November 2026
+([testnet evidence, section 18](TESTNET-EVIDENCE-TRANCHE-2.md#18-controlled-sep-41-run-30-october-2026)).
+A costlier restore stops the run before signing. An
 existing instance can instead be supplied as a contract address; its exact code is read and
 checked before use. No unknown policy implementation is accepted.
 
@@ -79,8 +83,11 @@ rejects before authorization (arity, type confusion) stay offline layer-1 eviden
 report lists them by class and reason. The unrecognized-signer case and the
 delegate-plus-unrecognized case stop at the same account check, so they count as two suite cases
 but only one live check. **Status:** the [22 October run](TESTNET-EVIDENCE-TRANCHE-2.md#11-controlled-sep-41-run-with-derived-denials-22-october-2026)
-permitted the original and refused all ten derived denials as predicted. The 20 October run
-(§8) predates the step.
+permitted the original and refused all ten derived denials as predicted, and the
+[30 October run](TESTNET-EVIDENCE-TRANCHE-2.md#18-controlled-sep-41-run-30-october-2026) at
+revision `60e1da70` repeated that result, as did the
+[1 November run](TESTNET-EVIDENCE-TRANCHE-2.md#22-controlled-sep-41-run-1-november-2026) at
+revision `86854cee`. The 20 October run (§8) predates the step.
 
 Wrong-tuple and signer controls run before the first charge. Every W2 negative control is an
 enforcing simulation, with no fee-transaction signing or submission even if unexpectedly
