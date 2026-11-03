@@ -766,10 +766,127 @@ class Formats(unittest.TestCase):
             self.assertEqual(ran.returncode, 2)
 
 
+class DirectWalletHandoff(unittest.TestCase):
+    def events(self, body=None):
+        connection = {"connection": {"account": ACCOUNT, "delegate": DELEGATE, "networkId": NETWORK_ID,
+            "connectionId": "ef" * 32, "expiresInSeconds": 1800,
+            "limits": {"maxCalls": 512, "maxValidityLedgers": 17280, "exactNativeTransferOnly": True}}}
+        return [call("pair", MCP + "connect_wallet", {"pairing_code": "ozpb-pair-" + "aa" * 32}),
+                result("pair", connection)] + session()[:-2] + [
+                call("deliver", MCP + "send_wallet_proposal", {"proposal_json": json.dumps(body or proposal())})]
+
+    def test_confirmed_direct_handoff_needs_no_manual_install_skill(self):
+        self.assertEqual(check(self.events()), [])
+
+    def test_direct_handoff_requires_final_confirmation(self):
+        events = self.events(); del events[CONFIRM + 2]
+        self.assertIn("handoff_without_confirmation", checks(events))
+
+    def test_direct_handoff_rechecks_proposal_provenance(self):
+        self.assertIn("proposal_provenance", checks(self.events(proposal(spec_hash="ef" * 32))))
+
+    def test_direct_handoff_requires_the_paired_account_and_delegate(self):
+        events = self.events(); del events[:2]
+        self.assertIn("wallet_connection", checks(events))
+        events = self.events()
+        events[1] = result("pair", {"connection": {"account": TARGET, "delegate": RECIPIENT, "networkId": NETWORK_ID}})
+        self.assertIn("wallet_connection", checks(events))
+
+    def test_a_new_connection_after_confirmation_requires_a_new_card(self):
+        events = self.events(); pair = events[:2]; del events[:2]
+        events[-1:-1] = pair
+        self.assertIn("handoff_without_confirmation", checks(events))
+
+    def test_malformed_direct_proposals_report_findings_without_crashing(self):
+        for key in ("expected_grant", "decisions"):
+            for value in (None, [], "not-an-object", 1):
+                body = proposal(); body[key] = value
+                self.assertIn("proposal_provenance", checks(self.events(body)))
+                self.assertIn("wallet_connection", checks(self.events(body)))
+
+    def test_an_intervening_user_question_invalidates_direct_handoff_confirmation(self):
+        events = self.events(); events[-1:-1] = [user("Can we change the recipient?")]
+        self.assertIn("handoff_without_confirmation", checks(events))
+
+    UNTYPED = "Use my wallet's automation key, until ledger 5000, at most 3 calls, call it pay-bob."
+
+    def test_the_connected_wallets_delegate_need_not_be_typed_by_the_user(self):
+        # The skill uses the delegate the paired wallet reported; the user chose it by pairing.
+        events = self.events()
+        events[2 + 4] = user(self.UNTYPED)
+        self.assertEqual(check(events), [])
+
+    def test_an_untyped_delegate_must_still_be_the_connected_one(self):
+        for connection in ({"connection": {"account": ACCOUNT, "delegate": RECIPIENT, "networkId": NETWORK_ID}},
+                           "E_WALLET_PAIRING_REQUIRED: refused"):
+            events = self.events()
+            events[1] = result("pair", connection, is_error=isinstance(connection, str))
+            events[2 + 4] = user(self.UNTYPED)
+            self.assertIn("synthesize_before_decisions", checks(events))
+
+    RECEIPT = {"receipt": {"deliveryId": "ab" * 32, "status": "pending", "account": ACCOUNT,
+                           "delegate": DELEGATE, "connectionId": "ef" * 32},
+               "wallet_review_required": True}
+
+    def resend(self, first_result, body):
+        events = self.events()
+        if first_result is not None:
+            events.append(first_result)
+        return events + [call("again", MCP + "send_wallet_proposal", {"proposal_json": body})]
+
+    def test_retrying_identical_bytes_needs_no_new_confirmation(self):
+        same = json.dumps(proposal())
+        for first in (None, result("deliver", "E_WALLET_BUSY: busy", is_error=True),
+                      result("deliver", self.RECEIPT)):
+            self.assertEqual(check(self.resend(first, same)), [])
+
+    def test_different_bytes_after_a_staged_or_unanswered_send_need_a_new_confirmation(self):
+        reformatted = json.dumps(proposal(), indent=1)
+        for first in (None, result("deliver", self.RECEIPT)):
+            self.assertIn("handoff_without_confirmation", checks(self.resend(first, reformatted)))
+
+    def test_a_corrected_proposal_after_a_refusal_needs_no_new_confirmation(self):
+        refused = result("deliver", "E_WALLET_PROPOSAL_REFUSED: malformed", is_error=True)
+        self.assertEqual(check(self.resend(refused, json.dumps(proposal(), indent=1))), [])
+
+    def test_different_bytes_after_a_send_that_may_have_staged_need_a_new_confirmation(self):
+        # No answer from the wallet, or a failure after it answered, may still have staged a draft.
+        reformatted = json.dumps(proposal(), indent=1)
+        for payload in ({"code": "E_WALLET_UNAVAILABLE", "message": "The wallet did not answer"},
+                        "E_INTERNAL: join error", {"code": "E_SOMETHING_NEW", "message": "?"},
+                        "MCP error -32001: Request timed out"):
+            first = result("deliver", payload, is_error=True)
+            self.assertIn("handoff_without_confirmation", checks(self.resend(first, reformatted)), payload)
+        for payload in ({"code": "E_WALLET_BUSY", "message": "busy"}, "E_WALLET_DRAFT_PENDING: waiting",
+                        {"code": "E_WALLET_PAIRING_REQUIRED", "message": "pair"},
+                        "The user doesn't want to proceed with this tool use."):
+            first = result("deliver", payload, is_error=True)
+            self.assertEqual(check(self.resend(first, reformatted)), [], payload)
+
+    def test_confirming_again_without_a_new_card_does_not_allow_other_bytes(self):
+        events = self.events() + [result("deliver", self.RECEIPT), user("confirm"),
+                                  call("again", MCP + "send_wallet_proposal",
+                                       {"proposal_json": json.dumps(proposal(), indent=1)})]
+        self.assertIn("handoff_without_confirmation", checks(events))
+
+    def test_another_servers_connect_wallet_leaves_the_policy_builder_connection(self):
+        events = self.events()
+        events[-1:-1] = [call("foreign", "mcp__other__connect_wallet", {"code": "x"}),
+                         result("foreign", {"connection": {"account": TARGET, "delegate": RECIPIENT}})]
+        self.assertEqual(check(events), [])
+
+    def test_only_the_policy_builder_wallet_supplies_an_untyped_delegate(self):
+        events = self.events()
+        events[0] = call("pair", "mcp__other__connect_wallet", {"pairing_code": "ozpb-pair-" + "aa" * 32})
+        events[2 + 4] = user(self.UNTYPED)
+        self.assertIn("synthesize_before_decisions", checks(events))
+
+
 class RepositoryConfiguration(unittest.TestCase):
     """The plugin and skills never pre-approve a tool that needs a person per call."""
 
-    PER_CALL = ("prepare_install_intent", "assemble_install_transaction", "capture_target")
+    PER_CALL = ("prepare_install_intent", "assemble_install_transaction", "capture_target",
+                "send_wallet_proposal")
     # A rule naming the whole server, bare or with a wildcard, covers every tool on it.
     SERVER_WIDE = re.compile(r"mcp__(plugin_oz-policy-builder_)?ozpb(__\*|\*|[\"'\s,\]]|$)",
                              re.M)
@@ -806,6 +923,18 @@ class RepositoryConfiguration(unittest.TestCase):
     def test_the_install_skill_is_human_invoked(self):
         front = self.frontmatter(ROOT / "skills" / "policy-builder-install" / "SKILL.md")
         self.assertRegex(front, r"(?m)^disable-model-invocation:\s*true\s*$")
+
+    def test_install_skill_wallet_path_uses_the_execution_cap(self):
+        # Import permits larger inspection-only grants; the installation chooser must
+        # agree with the worker rather than send a refused grant back to the same limit.
+        limits = (ROOT / "wallet" / "shared" / "execution-limits.mjs").read_text()
+        worker_cap = re.search(r"maxCalls:\s*(\d+)", limits)
+        skill = (ROOT / "skills" / "policy-builder-install" / "SKILL.md").read_text()
+        chooser = skill.split("## 2. Choose the path", 1)[1].split("## 3.", 1)[0]
+        wallet_cap = re.search(r"call cap of 1 to ([\d,]+) calls", chooser)
+        self.assertIsNotNone(worker_cap)
+        self.assertIsNotNone(wallet_cap)
+        self.assertEqual(int(wallet_cap[1].replace(",", "")), int(worker_cap[1]))
 
 
 if __name__ == "__main__":

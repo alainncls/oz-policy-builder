@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { AgentRefusal } from './agent-handoff.mjs';
 
 const BODY_BYTES = 64 * 1024;
 const RESPONSE_BYTES = 8 * 1024 * 1024;
@@ -37,9 +38,10 @@ function bodyBytes(request) {
 }
 
 /** Authentication, admission and redaction surround every trusted local action. */
-export function createWalletServer({ session, actions }) {
+export function createWalletServer({ session, actions, handoff = null }) {
   const routes = Object.freeze({ ...actions });
   let busy = false;
+  let agentBodies = 0;
   const server = createServer(async (request, response) => {
     function reply(status, body) {
       if (response.destroyed || response.writableEnded) return;
@@ -48,6 +50,42 @@ export function createWalletServer({ session, actions }) {
       response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store',
         'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; frame-ancestors 'none'" });
       response.end(text);
+    }
+    // Native MCP has only two draft-only routes. Browser full-session guards below are
+    // unchanged; this interface never dispatches an arbitrary wallet action.
+    if (typeof request.url === 'string' && request.url.startsWith('/agent/')) {
+      const count = name => request.rawHeaders.filter((_, i) => i % 2 === 0)
+        .filter(header => header.toLowerCase() === name).length;
+      const connect = request.url === '/agent/connect';
+      if (!handoff || request.method !== 'POST' || (!connect && request.url !== '/agent/proposal')
+        || count('host') !== 1 || request.headers.host !== `127.0.0.1:${request.socket.localPort}`
+        || count('origin') !== 0 || count('content-type') !== 1
+        || !/^application\/json(?:;\s*charset=utf-8)?$/i.test(request.headers['content-type'] ?? '')
+        || count('authorization') !== (connect ? 0 : 1)) {
+        request.resume(); reply(403, { error: 'agent request unauthorized' }); return;
+      }
+      // A refusal names one closed reason, so the agent can tell a retry from a reconnection
+      // or a rejected proposal. The request itself is never echoed.
+      const refused = reason => reply(422, { error: 'agent request refused', reason });
+      const capability = /^Bearer ([0-9a-f]{64})$/.exec(request.headers.authorization ?? '')?.[1];
+      // Without the draft capability a caller learns nothing about wallet activity or content;
+      // without a valid pairing code (checked below, once the body arrives) neither.
+      if (!connect && !handoff.authorized(capability)) { request.resume(); refused('connection_unavailable'); return; }
+      if (agentBodies >= 4) { request.resume(); reply(429, { error: 'agent request capacity reached', reason: 'capacity' }); return; }
+      agentBodies++;
+      try {
+        let body;
+        try { body = parseBody(await bodyBytes(request)); } catch { refused('request_invalid'); return; }
+        const fields = connect ? ['pairingCode'] : ['deliveryId', 'proposal'];
+        if (Object.keys(body).length !== fields.length || fields.some(k => !Object.hasOwn(body, k))) { refused('request_invalid'); return; }
+        if (connect && !handoff.pairable(body.pairingCode)) { refused('pairing_refused'); return; }
+        // No privileged wallet admission is held while an unauthenticated body arrives.
+        // This check and the draft mutation are synchronous, with no intervening await.
+        if (busy) { reply(409, { error: 'wallet session busy', reason: 'busy' }); return; }
+        reply(200, connect ? handoff.connect(body.pairingCode) : handoff.deliver(capability, body));
+      } catch (error) { refused(error instanceof AgentRefusal ? error.reason : 'unavailable'); }
+      finally { agentBodies--; }
+      return;
     }
     try {
       for (const name of ['host', 'origin', 'authorization', 'content-type']) {

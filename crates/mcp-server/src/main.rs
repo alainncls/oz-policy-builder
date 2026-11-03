@@ -30,6 +30,7 @@ mod policy_check;
 mod preflight;
 mod tool_limits;
 mod verification;
+mod wallet_handoff;
 
 #[derive(Clone)]
 struct RpcEndpointPolicy {
@@ -126,6 +127,7 @@ struct PolicyBuilderServer {
     /// This session's generated artifacts. Per session on a hosted server too: one client
     /// cannot name another's.
     generated: Arc<std::sync::Mutex<GeneratedArtifacts>>,
+    wallet_bridge: Option<Arc<std::sync::Mutex<wallet_handoff::WalletBridge>>>,
 }
 
 impl PolicyBuilderServer {
@@ -141,7 +143,8 @@ impl PolicyBuilderServer {
                 + Self::preflight_tool_router()
                 + Self::authority_tool_router()
                 + Self::policy_check_tool_router()
-                + Self::capture_tool_router(),
+                + Self::capture_tool_router()
+                + Self::wallet_handoff_tool_router(),
             authority_slots: rpc_policy
                 .as_ref()
                 .map(|_| Arc::new(tokio::sync::Semaphore::new(1))),
@@ -151,6 +154,7 @@ impl PolicyBuilderServer {
             build_config,
             tool_quotas: None,
             generated: Default::default(),
+            wallet_bridge: None,
         }
     }
 
@@ -588,9 +592,10 @@ async fn main() -> anyhow::Result<()> {
             http::serve(&addr, registry_trust, rpc_sources, build_config).await
         }
         _ => {
-            let service = PolicyBuilderServer::new(registry_trust, None, rpc_sources, build_config)
-                .serve(rmcp::transport::stdio())
-                .await?;
+            let mut server =
+                PolicyBuilderServer::new(registry_trust, None, rpc_sources, build_config);
+            server.wallet_bridge = wallet_handoff::configured_bridge()?;
+            let service = server.serve(rmcp::transport::stdio()).await?;
             service.waiting().await?;
             Ok(())
         }

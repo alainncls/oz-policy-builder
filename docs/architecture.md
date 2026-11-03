@@ -758,7 +758,8 @@ Design rules:
 
 > **Scope: Tranche 2.** `skills/policy-builder/SKILL.md` and the Claude plugin are available.
 > They guide recording, synthesis, layer-1 reference checks, generation, and verification.
-> Full contract/live dry-run evidence and wallet installation remain scheduled work.
+> MCP prepares and delivers drafts; the wallet performs its supported execution checks
+> and installation separately.
 
 A packaged Claude skill (portable to other agent frameworks — the skill layer is thin by
 design) that wraps the MCP tools with the conversational entry point the RFP describes:
@@ -784,11 +785,14 @@ policy."*
   plain-English account of the grant and its unconstrained parts (§6.1). It stops before
   installation. It may relay the advisory `check_policy_call_surface` answer, but never calls
   an account safe; a complete dry run and the wallet's own authority check and review are
-  prerequisites for a future install handoff, and the skill does not claim they ran.
-- **Future install handoff:** keep it human-invoked (`disable-model-invocation` on the install
-  sub-skill), require per-call user interaction for wallet-adjacent tools, and show the full
-  dry-run report and live call-surface result before explicit confirmation. The agent must
-  never chain past confirmation into signing or submission.
+  prerequisites for installation, and the skill does not claim they ran merely because a draft
+  was handed off.
+- **Confirmed draft handoff:** a paired local wallet receives an unverified proposal after the
+  final complete card and explicit confirmation, without a second skill invocation. The
+  [local bridge](AGENT-WALLET-HANDOFF.md) grants draft delivery only; the wallet user selects
+  Review before the existing independent regeneration, execution checks and passkey approval.
+  The human-invoked install sub-skill remains the manual fallback. The agent never signs,
+  submits or installs, and delivery never establishes that wallet checks passed.
 - **Packaging:** the Claude plugin bundles `skills/policy-builder/SKILL.md` and a stdio MCP
   server entry in `.claude-plugin/plugin.json`. The repository-level `.mcp.json` also works
   for local tool use without the skill. [SELF-HOSTING.md](SELF-HOSTING.md) packages the HTTP

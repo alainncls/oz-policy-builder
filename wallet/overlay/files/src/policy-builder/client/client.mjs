@@ -1,4 +1,4 @@
-const ENDPOINTS = new Set(['status', 'prepare-account', 'confirm-account', 'prepare-sample', 'submit-sample', 'record', 'generate', 'import-proposal',
+const ENDPOINTS = new Set(['status', 'prepare-account', 'confirm-account', 'prepare-sample', 'submit-sample', 'record', 'generate', 'import-proposal', 'pair-agent', 'agent-inbox', 'disconnect-agent', 'dismiss-agent-proposal', 'review-agent-proposal',
   'prepare-deploy', 'confirm-deploy', 'review', 'create-delegate', 'check-account', 'prepare-live', 'consent-live', 'run-live',
   'check-replay', 'assemble', 'submit', 'monitor-grant', 'prepare-replacement', 'confirm-replacement', 'prepare-revoke',
   'confirm-revoke']);
