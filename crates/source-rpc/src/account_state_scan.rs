@@ -6,10 +6,12 @@
 //! contains its own closure: each round requests the keys the previous response named, until
 //! one response names no key outside its request. Earlier responses only discover keys. A
 //! closure above one request's 200 keys is read in stages instead, each reporting the same
-//! ledger, with the instance read again at the end. Either way the endpoint's `latestLedger`
-//! is metadata, not a ledger-state proof. An omitted rule can be a removed hole only when the
-//! complete count agrees. This result carries an ordered key/value/TTL digest but no
-//! designated administrator. The digest identifies endpoint responses; it cannot establish a
+//! ledger, with the instance read again at the end. The one-response consistency is how
+//! stellar-rpc serves a request, so it assumes the endpoint is stellar-rpc; a proxy that caches
+//! or fetches keys separately is outside that assumption. Either way the endpoint's
+//! `latestLedger` is metadata, not a ledger-state proof. An omitted rule can be a removed hole
+//! only when the complete count agrees. This result carries an ordered key/value/TTL digest but
+//! no designated administrator. The digest identifies endpoint responses; it cannot establish a
 //! Safe install verdict.
 
 use super::{
@@ -45,8 +47,8 @@ use stellar_xdr::{ContractId, Hash, LedgerEntryData};
 pub(crate) const MAX_SCAN_WITNESS_BYTES: usize = 24 * 1024 * 1024;
 
 /// Rule slots the first request names before `NextId` is known, so that the first response
-/// already holds every rule of a typical account. Slots at or past `NextId` are not in the
-/// closure and are ignored.
+/// already holds every rule of a typical account; fewer when the fixed keys leave less room.
+/// Slots at or past `NextId` are not in the closure and are ignored.
 const FIRST_RULE_SLOTS: u32 = 32;
 
 /// Operational ceilings for one inspection. Registry-backed verified mode would need
@@ -309,16 +311,19 @@ fn scan_once<T: RpcTransport>(
     let account = ContractId(Hash(account_id));
     let mut request = BTreeSet::from([ClosureKey::Account(AccountEntryKey::Instance)]);
     request.extend(
-        (0..bounds.max_scan_ids.min(FIRST_RULE_SLOTS))
-            .map(|id| ClosureKey::Account(AccountEntryKey::Rule(id))),
-    );
-    request.extend(
         target_addresses
             .iter()
             .filter(|address| *address != account_address)
             .map(|address| ClosureKey::Instance(address.clone())),
     );
     request.extend(classic_targets.iter().cloned().map(ClosureKey::Classic));
+    // Speculative slots only in room the fixed keys leave, so they never push a closure that
+    // fits one request into the staged read.
+    let room = u32::try_from(MAX_LEDGER_ENTRY_KEYS.saturating_sub(request.len())).unwrap_or(0);
+    request.extend(
+        (0..bounds.max_scan_ids.min(FIRST_RULE_SLOTS).min(room))
+            .map(|id| ClosureKey::Account(AccountEntryKey::Rule(id))),
+    );
     let mut batches = 0;
     // Whether every response so far only added keys to its predecessor's closure and answered
     // the shared ones identically: then running out of batches is the budget's fault, and
@@ -326,6 +331,15 @@ fn scan_once<T: RpcTransport>(
     let mut growing = true;
     let mut previous: Option<(BTreeSet<ClosureKey>, ClosureResponse)> = None;
     loop {
+        // Before the staged fallback, so a closure that outgrew one request just as the batches
+        // ran out is judged like any other unsettled closure.
+        if batches >= bounds.max_rpc_batches {
+            return Err(if growing {
+                AccountScanError::Budget("getLedgerEntries batch count exceeds bound")
+            } else {
+                AccountScanError::SnapshotChanged
+            });
+        }
         if request.len() > MAX_LEDGER_ENTRY_KEYS {
             return scan_staged(
                 &transport,
@@ -337,13 +351,6 @@ fn scan_once<T: RpcTransport>(
                 bounds,
                 batches,
             );
-        }
-        if batches >= bounds.max_rpc_batches {
-            return Err(if growing {
-                AccountScanError::Budget("getLedgerEntries batch count exceeds bound")
-            } else {
-                AccountScanError::SnapshotChanged
-            });
         }
         batches += 1;
         let response = read_closure_entries(&transport, &account, &request)?;
@@ -2434,5 +2441,130 @@ mod tests {
             scan_account_state(&unmodeled, NETWORK, &address(7), two),
             Err(AccountScanError::SnapshotChanged)
         ));
+    }
+
+    /// A rule past the slots the first request names is found in a later round, with its
+    /// signer and that signer's classic account, while the ledger closes before every call.
+    /// The same slot omitted while `Count` says it exists is incomplete, not a hole.
+    #[test]
+    fn rules_past_the_first_requests_slots_are_read_to_a_closing_response() {
+        let beyond = || {
+            let mock = Mock {
+                advancing_ledger: true,
+                ..mock()
+            };
+            let mut values = mock.values.borrow_mut();
+            values.insert(encoded(7, AccountEntryKey::Instance), (instance(40, 1), 20));
+            values.remove(&encoded(7, AccountEntryKey::Rule(0)));
+            values.insert(encoded(7, AccountEntryKey::Rule(35)), (rule(), 20));
+            values.insert(
+                encoded(7, AccountEntryKey::Signer(2)),
+                (classic_signer(CLASSIC_PRESENT), 20),
+            );
+            drop(values);
+            mock
+        };
+        let endpoint = beyond();
+        let scan = inspect(&endpoint).unwrap();
+        assert_eq!(scan.rules.keys().copied().collect::<Vec<_>>(), [35]);
+        assert!(matches!(
+            scan.signers[&2].signer,
+            SignerIdentity::Delegated(_)
+        ));
+        assert!(matches!(
+            scan.classic_accounts[&classic(CLASSIC_PRESENT)],
+            ClassicAccount::Found { .. }
+        ));
+        // Slots through `NextId`, then the signer, then its account, then the closing read.
+        assert_eq!(
+            (scan.rpc_batches, scan.reported_latest_ledger),
+            (4, LedgerSeq(14))
+        );
+
+        let missing = beyond();
+        missing
+            .values
+            .borrow_mut()
+            .remove(&encoded(7, AccountEntryKey::Rule(35)));
+        assert!(matches!(
+            inspect(&missing),
+            Err(AccountScanError::Incomplete(_))
+        ));
+    }
+
+    /// Many caller targets leave fewer speculative rule slots in the first request rather than
+    /// pushing it past one request's 200 keys into the staged read.
+    #[test]
+    fn caller_targets_shrink_the_first_requests_rule_slots() {
+        let targets = (0..180u8)
+            .map(|index| {
+                let mut id = [100; 32];
+                id[0] = index;
+                id
+            })
+            .collect::<Vec<_>>();
+        let endpoint = mock();
+        for id in &targets {
+            endpoint.values.borrow_mut().insert(
+                LedgerKey::ContractData(ledger_key(
+                    &ContractId(Hash(*id)),
+                    AccountEntryKey::Instance,
+                ))
+                .to_xdr_base64(xdr_limits())
+                .unwrap(),
+                (code_instance(3), 20),
+            );
+        }
+        let addresses = targets
+            .iter()
+            .map(|id| format!("{}", stellar_strkey::Contract(*id)))
+            .collect::<Vec<_>>();
+        let scan = scan_account_state_with_targets(
+            &endpoint,
+            NETWORK,
+            &address(7),
+            &addresses,
+            AccountScanBounds {
+                max_attempts: 1,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(scan.observed_code_hashes.len(), 180);
+        // The staged read would take five: instance, rules, signer, code, instance.
+        assert_eq!(scan.rpc_batches, 2);
+    }
+
+    /// A closure that changed and grew past 200 keys just as the batches ran out is a changed
+    /// snapshot, classified like any other unsettled closure, not the staged read's budget.
+    #[test]
+    fn running_out_of_batches_before_the_staged_read_is_classified() {
+        let grown = Mock {
+            on_call: Some(|call, values| {
+                if call == 2 {
+                    values.insert(
+                        encoded(7, AccountEntryKey::Instance),
+                        (instance(201, 1), 20),
+                    );
+                }
+            }),
+            ..mock()
+        };
+        let result = scan_account_state(
+            &grown,
+            NETWORK,
+            &address(7),
+            AccountScanBounds {
+                max_scan_ids: 201,
+                max_rpc_batches: 2,
+                max_attempts: 1,
+                ..Default::default()
+            },
+        );
+        assert!(
+            matches!(result, Err(AccountScanError::SnapshotChanged)),
+            "{result:?}"
+        );
+        assert_eq!(grown.calls.get(), 2);
     }
 }

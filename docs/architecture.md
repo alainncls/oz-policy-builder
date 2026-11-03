@@ -911,7 +911,9 @@ verification steps that make it trustworthy:**
         reads all keys of one `getLedgerEntries` request at the one ledger it reports, so
         the scan requests the closure the previous response named until one response's
         closure lies inside its own request, and builds the result from that response
-        alone; earlier responses only discover keys. A closure that keeps changing until
+        alone; earlier responses only discover keys. This relies on the endpoint being
+        stellar-rpc, which serves one request at one ledger; a proxy that caches or fetches
+        keys separately is outside that assumption. A closure that keeps changing until
         the batch budget runs out is retried as a whole. Above 200 keys (one request's
         limit) the closure is read in batches that must all report the same ledger, then
         the account instance/code identity is re-read and compared, retrying on change.
