@@ -38,7 +38,7 @@ walkthrough, wallet and dependency updates are prepared in PRs #95–#99; see th
 for the integrated baseline, pending increments and remaining evidence.
 
 A deployed hosted testnet MCP endpoint and its operational checks, final-revision reports,
-remaining invariant coverage and the router-deadline bound, the executed agent workflow,
+remaining invariant coverage, the executed agent workflow,
 and the public demo/video still
 need closure. The production versioned release (self-hostable; Gateway operates no service),
 audit remediation, OpenZeppelin sign-off and mainnet wallet integration are
