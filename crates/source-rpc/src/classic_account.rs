@@ -8,7 +8,9 @@
 //! authenticate now). Balances and sequence numbers are deliberately not carried into the
 //! decoded configuration: they move on every transaction without changing who can sign. The
 //! raw entry still goes into the scan's witness digest, which is evidence and so does move
-//! with every payment; the authority commitment does not.
+//! with every payment; the authority commitment does not. The scan reads these entries in the
+//! same response as the account's storage and decodes them with [`decode_classic_account`];
+//! the batched reader below serves its staged read of a closure above one request's key limit.
 
 use super::{
     ledger_witness::LedgerWitness, verify_network, xdr_limits, RpcError, RpcTransport,
@@ -19,8 +21,8 @@ use ozpb_domain::{LedgerSeq, NetworkId};
 use serde_json::json;
 use std::collections::BTreeMap;
 use stellar_xdr::{
-    AccountId, LedgerEntryData, LedgerKey, LedgerKeyAccount, PublicKey, ReadXdr, SignerKey,
-    Uint256, WriteXdr,
+    AccountEntry, AccountId, LedgerEntryData, LedgerKey, LedgerKeyAccount, PublicKey, ReadXdr,
+    SignerKey, Uint256, WriteXdr,
 };
 
 /// Signing configurations returned in one checked `getLedgerEntries` response.
@@ -141,12 +143,6 @@ pub(crate) fn read_classic_accounts_with_witnesses<T: RpcTransport>(
                 "entry {index} is not an account entry"
             )));
         };
-        let AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(id))) = &account.account_id;
-        if id != account_bytes {
-            return Err(RpcError::Malformed(format!(
-                "entry {index} is a different account than its key"
-            )));
-        }
         let last_modified_ledger: u32 = entry["lastModifiedLedgerSeq"]
             .as_u64()
             .ok_or_else(|| {
@@ -163,35 +159,10 @@ pub(crate) fn read_classic_accounts_with_witnesses<T: RpcTransport>(
                 "getLedgerEntries entry {index} was modified after reported latestLedger"
             )));
         }
-        let entry_data_xdr = LedgerEntryData::Account(account.clone())
-            .to_xdr(xdr_limits())
-            .map_err(|error| RpcError::Malformed(format!("entry {index} payload XDR: {error}")))?;
-        let [master_weight, low_threshold, medium_threshold, high_threshold] = account.thresholds.0;
-        let signers = account
-            .signers
-            .iter()
-            .map(|signer| ClassicSigner {
-                key: signer_key(&signer.key),
-                weight: signer.weight,
-            })
-            .collect();
-        accounts.insert(
-            address.clone(),
-            ClassicAccount::Found {
-                master_weight,
-                low_threshold,
-                medium_threshold,
-                high_threshold,
-                signers,
-            },
-        );
-        witnesses.insert(
-            key_xdr.clone(),
-            LedgerWitness::Classic {
-                entry_data_xdr,
-                last_modified_ledger,
-            },
-        );
+        let (found, witness) =
+            decode_classic_account(index, &account, account_bytes, last_modified_ledger)?;
+        accounts.insert(address.clone(), found);
+        witnesses.insert(key_xdr.clone(), witness);
     }
     for (address, key_xdr, _) in requested.values() {
         if !accounts.contains_key(address) {
@@ -206,6 +177,47 @@ pub(crate) fn read_classic_accounts_with_witnesses<T: RpcTransport>(
             accounts,
         },
         witnesses,
+    ))
+}
+
+/// The signing configuration in one returned account entry, which must be the account its key
+/// names, with its digest witness.
+pub(crate) fn decode_classic_account(
+    index: usize,
+    account: &AccountEntry,
+    account_bytes: &[u8; 32],
+    last_modified_ledger: u32,
+) -> Result<(ClassicAccount, LedgerWitness), RpcError> {
+    let AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(id))) = &account.account_id;
+    if id != account_bytes {
+        return Err(RpcError::Malformed(format!(
+            "entry {index} is a different account than its key"
+        )));
+    }
+    let entry_data_xdr = LedgerEntryData::Account(account.clone())
+        .to_xdr(xdr_limits())
+        .map_err(|error| RpcError::Malformed(format!("entry {index} payload XDR: {error}")))?;
+    let [master_weight, low_threshold, medium_threshold, high_threshold] = account.thresholds.0;
+    let signers = account
+        .signers
+        .iter()
+        .map(|signer| ClassicSigner {
+            key: signer_key(&signer.key),
+            weight: signer.weight,
+        })
+        .collect();
+    Ok((
+        ClassicAccount::Found {
+            master_weight,
+            low_threshold,
+            medium_threshold,
+            high_threshold,
+            signers,
+        },
+        LedgerWitness::Classic {
+            entry_data_xdr,
+            last_modified_ledger,
+        },
     ))
 }
 

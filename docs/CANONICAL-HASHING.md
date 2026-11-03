@@ -245,10 +245,13 @@ SHA-256(
 )
 ```
 
-Every integer is big-endian. A key read twice in one scan appears once and must carry identical
-bytes and metadata both times, or the scan fails; an archived entry never reaches the digest,
-because the scan refuses it first. The ledger is the endpoint's reported `latestLedger`, so the
-digest identifies the responses a scan used; it is not a ledger-state proof.
+Every integer is big-endian. The entries are the closure the scan settled on, read from one
+response; keys a discovery request named outside that closure are not among them. When a
+closure above 200 keys is read in several responses, a key read twice appears once and must
+carry identical bytes and metadata both times, or the scan fails. An archived entry never
+reaches the digest, because the scan refuses it first. The ledger is the endpoint's reported
+`latestLedger`, so the digest identifies the responses a scan used; it is not a ledger-state
+proof.
 `digest_is_the_documented_byte_layout` in `crates/source-rpc/src/ledger_witness.rs` pins a value
 recomputed from this layout outside the crate.
 

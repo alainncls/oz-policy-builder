@@ -68,7 +68,6 @@ fn capture_target_replays_recorded_testnet_fixture() {
         [
             "getNetwork",
             "simulateTransaction",
-            "getNetwork",
             "getLedgerEntries",
             "getLedgers"
         ]
@@ -183,24 +182,34 @@ fn refusals_name_their_code_before_the_network() {
 
 #[test]
 fn an_endpoint_echoing_the_envelope_never_reaches_the_response() {
-    let envelope = envelope();
-    let echoed = envelope.clone();
-    // The endpoint holds the envelope after simulation and reports it back as its network.
-    let endpoint = ReplayEndpoint::bind(move |method, nth| match (method, nth) {
-        ("getNetwork", 1) => {
-            Reply::Result(json!({"passphrase": echoed.clone(), "protocolVersion": 29}))
-        }
-        (other, _) => Reply::Result(target_capture_rpc::recorded(other)),
-    });
-    let call = capture_call(&endpoint.url, arguments(&envelope));
-    endpoint.finish();
-    assert_eq!(call["result"]["isError"], true, "{call}");
-    // The category survives without the endpoint's words.
-    assert_eq!(
-        call["result"]["structuredContent"]["code"], "E_NETWORK_MISMATCH",
-        "{call}"
-    );
-    assert!(!call.to_string().contains(&envelope), "{call}");
+    // The network is checked once, before the simulation, so an endpoint can name the envelope
+    // as its network only if it saw the envelope earlier; after the simulation it holds it and
+    // can quote it in the entry read's error.
+    for (echo_at, code) in [
+        ("getNetwork", "E_NETWORK_MISMATCH"),
+        ("getLedgerEntries", "E_RPC"),
+    ] {
+        let envelope = envelope();
+        let echoed = envelope.clone();
+        let endpoint = ReplayEndpoint::bind(move |method, _| match method {
+            "getNetwork" if method == echo_at => {
+                Reply::Result(json!({"passphrase": echoed.clone(), "protocolVersion": 29}))
+            }
+            other if other == echo_at => {
+                Reply::Error(json!({"code": -32000, "message": echoed.clone()}))
+            }
+            other => Reply::Result(target_capture_rpc::recorded(other)),
+        });
+        let call = capture_call(&endpoint.url, arguments(&envelope));
+        endpoint.finish();
+        assert_eq!(call["result"]["isError"], true, "{echo_at}: {call}");
+        // The category survives without the endpoint's words.
+        assert_eq!(
+            call["result"]["structuredContent"]["code"], code,
+            "{echo_at}: {call}"
+        );
+        assert!(!call.to_string().contains(&envelope), "{echo_at}: {call}");
+    }
 }
 
 #[test]

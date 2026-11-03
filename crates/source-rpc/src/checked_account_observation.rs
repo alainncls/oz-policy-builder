@@ -5,9 +5,9 @@
 //! storage, observed executable hashes and classic account entries. This reader judges
 //! nothing about authority: an unknown policy, verifier or contract signer anywhere on the
 //! account is reported as observed, and the pure check refuses it only where it matters
-//! (inside its scope). Matching `latestLedger` metadata and a final instance read detect
-//! ordinary races, but do not prove that separate RPC replies came from one coherent ledger
-//! state.
+//! (inside its scope). Every value comes from one `getLedgerEntries` response, or for a closure
+//! above 200 keys from several reporting the same `latestLedger` with a matching instance
+//! re-read. That is the endpoint's account of one ledger, not a proof of it.
 
 use super::{
     project_account_state, scan_authority_state, AccountProjectionError, AccountScanBounds,
@@ -283,8 +283,8 @@ mod tests {
     };
     use std::collections::BTreeMap;
     use stellar_xdr::{
-        ContractDataEntry, ContractExecutable, ExtensionPoint, Hash, LedgerEntryData, LedgerKey,
-        ReadXdr, ScAddress, ScContractInstance, ScMapEntry, ScVal, WriteXdr,
+        ContractDataEntry, ContractExecutable, ContractId, ExtensionPoint, Hash, LedgerEntryData,
+        LedgerKey, ReadXdr, ScAddress, ScContractInstance, ScMapEntry, ScString, ScVal, WriteXdr,
     };
 
     const NETWORK: &str = "Test SDF Network ; September 2015";
@@ -455,9 +455,14 @@ mod tests {
         assert_eq!(observed.source_name, "operator-testnet");
     }
 
-    /// Serves an account with `NextId` 0 and the bound policy's instance: one instance read,
-    /// one code read, and the final instance read make three `getLedgerEntries` batches.
-    struct Endpoint;
+    /// Serves an account with `NextId` 0 and the bound policy's instance. The first request
+    /// names the account instance, the rule slots it reads before `NextId` is known, and the
+    /// bound policy, so its response contains the whole closure: one `getLedgerEntries` batch.
+    /// With `rule`, the account has one rule whose signer only a second response can contain.
+    #[derive(Default)]
+    struct Endpoint {
+        rule: bool,
+    }
     impl RpcTransport for Endpoint {
         fn call(
             &self,
@@ -468,6 +473,18 @@ mod tests {
                 return Ok(serde_json::json!({"passphrase": NETWORK, "protocolVersion": 28}));
             }
             assert_eq!(method, "getLedgerEntries");
+            let symbol = |name: &str| ScVal::Symbol(name.try_into().unwrap());
+            let vector = |items: Vec<ScVal>| ScVal::Vec(Some(items.try_into().unwrap()));
+            let map = |mut entries: Vec<(ScVal, ScVal)>| {
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                entries
+                    .into_iter()
+                    .map(|(key, val)| ScMapEntry { key, val })
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap()
+            };
+            let rules = u32::from(self.rule);
             let mut entries = Vec::new();
             for encoded in params["keys"].as_array().unwrap() {
                 let encoded = encoded.as_str().unwrap();
@@ -477,43 +494,59 @@ mod tests {
                     LedgerKey::Account(_) => continue,
                     other => panic!("unexpected key {other:?}"),
                 };
-                assert_eq!(key.key, ScVal::LedgerKeyContractInstance);
                 let account = matches!(
                     &key.contract,
                     ScAddress::Contract(contract) if contract.0.0 == [7; 32]
                 );
-                let expected = if account {
-                    pinned_upstream::OZ_SMART_ACCOUNT_WASM
+                let val = if key.key != ScVal::LedgerKeyContractInstance {
+                    assert!(account, "only the account's own storage is read");
+                    if !self.rule {
+                        continue;
+                    } else if key.key == vector(vec![symbol("ContextRuleData"), ScVal::U32(0)]) {
+                        ScVal::Map(Some(map(vec![
+                            (symbol("context_type"), vector(vec![symbol("Default")])),
+                            (
+                                symbol("name"),
+                                ScVal::String(ScString("owner".try_into().unwrap())),
+                            ),
+                            (symbol("policy_ids"), vector(vec![])),
+                            (symbol("signer_ids"), vector(vec![ScVal::U32(0)])),
+                            (symbol("valid_until"), ScVal::Void),
+                        ])))
+                    } else if key.key == vector(vec![symbol("SignerData"), ScVal::U32(0)]) {
+                        ScVal::Map(Some(map(vec![
+                            (symbol("count"), ScVal::U32(1)),
+                            (
+                                symbol("signer"),
+                                vector(vec![
+                                    symbol("Delegated"),
+                                    ScVal::Address(ScAddress::Contract(ContractId(Hash([15; 32])))),
+                                ]),
+                            ),
+                        ])))
+                    } else {
+                        continue;
+                    }
                 } else {
-                    assert!(matches!(
-                        &key.contract,
-                        ScAddress::Contract(contract) if contract.0.0 == [14; 32]
-                    ));
-                    pinned_upstream::OZ_SPENDING_LIMIT_POLICY_WASM
-                };
-                let storage = if account {
-                    let mut values = vec![
-                        ScMapEntry {
-                            key: ScVal::Vec(Some(
-                                vec![ScVal::Symbol("Count".try_into().unwrap())]
-                                    .try_into()
-                                    .unwrap(),
-                            )),
-                            val: ScVal::U32(0),
-                        },
-                        ScMapEntry {
-                            key: ScVal::Vec(Some(
-                                vec![ScVal::Symbol("NextId".try_into().unwrap())]
-                                    .try_into()
-                                    .unwrap(),
-                            )),
-                            val: ScVal::U32(0),
-                        },
-                    ];
-                    values.sort_by(|a, b| a.key.cmp(&b.key));
-                    Some(values.try_into().unwrap())
-                } else {
-                    None
+                    let expected = if account {
+                        pinned_upstream::OZ_SMART_ACCOUNT_WASM
+                    } else {
+                        assert!(matches!(
+                            &key.contract,
+                            ScAddress::Contract(contract) if contract.0.0 == [14; 32]
+                        ));
+                        pinned_upstream::OZ_SPENDING_LIMIT_POLICY_WASM
+                    };
+                    let storage = account.then(|| {
+                        map(vec![
+                            (vector(vec![symbol("Count")]), ScVal::U32(rules)),
+                            (vector(vec![symbol("NextId")]), ScVal::U32(rules)),
+                        ])
+                    });
+                    ScVal::ContractInstance(ScContractInstance {
+                        executable: ContractExecutable::Wasm(Hash(expected.0)),
+                        storage,
+                    })
                 };
                 entries.push(serde_json::json!({
                     "key": encoded,
@@ -522,10 +555,7 @@ mod tests {
                         contract: key.contract,
                         key: key.key,
                         durability: key.durability,
-                        val: ScVal::ContractInstance(ScContractInstance {
-                            executable: ContractExecutable::Wasm(Hash(expected.0)),
-                            storage,
-                        }),
+                        val,
                     }).to_xdr_base64(crate::xdr_limits()).unwrap(),
                     "lastModifiedLedgerSeq": 9,
                     "liveUntilLedgerSeq": 20,
@@ -540,7 +570,7 @@ mod tests {
         let config = config(signed_snapshot());
         let registry = verified_registry(&config, NOW).unwrap();
         let observed = inspect_with_transport(
-            &Endpoint,
+            &Endpoint::default(),
             &config,
             &registry,
             &address(7),
@@ -550,18 +580,18 @@ mod tests {
         )
         .unwrap();
         assert_eq!(observed.scan.reported_latest_ledger, LedgerSeq(10));
-        assert_eq!(observed.scan.rpc_batches, 3);
+        assert_eq!(observed.scan.rpc_batches, 1);
         assert_eq!(observed.bound_policies[0].address, address(14));
         assert!(observed.projection.classic_accounts.is_empty());
     }
 
-    /// The new rule's own classic signer is read in the same attempt, at the same ledger.
+    /// The new rule's own classic signer is read in the same response as the account.
     #[test]
     fn named_classic_accounts_are_read_with_the_account() {
         let config = config(signed_snapshot());
         let registry = verified_registry(&config, NOW).unwrap();
         let observed = inspect_with_transport(
-            &Endpoint,
+            &Endpoint::default(),
             &config,
             &registry,
             &address(7),
@@ -570,7 +600,7 @@ mod tests {
             &[account_id(30)],
         )
         .unwrap();
-        assert_eq!(observed.scan.rpc_batches, 4);
+        assert_eq!(observed.scan.rpc_batches, 1);
         assert_eq!(
             observed.projection.classic_accounts[&account_id(30)],
             ClassicAccount::NotFound
@@ -585,7 +615,7 @@ mod tests {
         let registry = verified_registry(&config, NOW).unwrap();
         let read = |expected_wasm_hash| {
             inspect_with_transport(
-                &Endpoint,
+                &Endpoint::default(),
                 &config,
                 &registry,
                 &address(7),
@@ -606,28 +636,34 @@ mod tests {
         ));
     }
 
-    /// The endpoint read above needs three batches. The ceiling comes from the signed
-    /// account capability, never from the scanner's defaults.
+    /// An account with a rule needs two batches: the first response names the rule's signer,
+    /// the second contains it. The ceiling comes from the signed account capability, never
+    /// from the scanner's defaults.
     #[test]
     fn signed_scan_bounds_limit_the_operator_read() {
-        let config = config(signed_snapshot_with(|snapshot| {
-            let account = snapshot
-                .accounts
-                .get_mut(&pinned_upstream::OZ_SMART_ACCOUNT_WASM.to_hex())
-                .unwrap();
-            account.bounded_next_id.as_mut().unwrap().max_rpc_batches = 2;
-        }));
-        let registry = verified_registry(&config, NOW).unwrap();
-        assert!(matches!(
+        let read = |max_rpc_batches| {
+            let config = config(signed_snapshot_with(|snapshot| {
+                let account = snapshot
+                    .accounts
+                    .get_mut(&pinned_upstream::OZ_SMART_ACCOUNT_WASM.to_hex())
+                    .unwrap();
+                account.bounded_next_id.as_mut().unwrap().max_rpc_batches = max_rpc_batches;
+            }));
+            let registry = verified_registry(&config, NOW).unwrap();
             inspect_with_transport(
-                &Endpoint,
+                &Endpoint { rule: true },
                 &config,
                 &registry,
                 &address(7),
                 pinned_upstream::OZ_SMART_ACCOUNT_WASM,
                 &bindings(),
                 &[],
-            ),
+            )
+            .map(|observed| observed.scan.rpc_batches)
+        };
+        assert_eq!(read(2).unwrap(), 2);
+        assert!(matches!(
+            read(1),
             Err(CheckedAccountObservationError::Scan(
                 AccountScanError::Budget(_)
             ))

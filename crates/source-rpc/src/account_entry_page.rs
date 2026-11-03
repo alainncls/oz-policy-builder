@@ -3,6 +3,9 @@
 //! The endpoint supplies values and ledger metadata. This page does not authenticate the
 //! endpoint, infer the history of an omitted key, or establish a coherent
 //! snapshot with another call. No authority decision may be inferred from this page alone.
+//! The account scan reads pages only for a closure above one request's key limit; otherwise it
+//! reads the account's keys in its own mixed request and decodes them with
+//! [`decode_account_entry`], as a page does.
 
 use super::{
     account_storage::{decode_account_storage, AccountStorageEntry},
@@ -111,59 +114,15 @@ pub(crate) fn read_account_entry_page<T: RpcTransport>(
         let key_xdr = LedgerKey::ContractData(ledger_key(&contract, request))
             .to_xdr(xdr_limits())
             .map_err(|error| RpcError::Malformed(format!("account key XDR: {error}")))?;
-        let witness = match status {
-            ContractDataStatus::Absent => Some(LedgerWitness::Absent),
-            ContractDataStatus::Present {
-                value: _,
-                last_modified_ledger,
-                live_until_ledger,
-            } => Some(LedgerWitness::Present {
-                entry_data_xdr: entry_payloads.get(&encoded).cloned().ok_or_else(|| {
-                    RpcError::Malformed("present account entry lacks validated payload".into())
-                })?,
-                last_modified_ledger: *last_modified_ledger,
-                live_until_ledger: *live_until_ledger,
-            }),
-            ContractDataStatus::Archived { .. } => None,
-        };
+        let (status, witness) = decode_account_entry(
+            &contract,
+            request,
+            status,
+            entry_payloads.get(&encoded).map(Vec::as_slice),
+        )?;
         if let Some(witness) = witness {
             witnesses.insert(key_xdr, witness);
         }
-        let status = match status {
-            ContractDataStatus::Absent => AccountEntryStatus::Absent,
-            ContractDataStatus::Archived {
-                value,
-                last_modified_ledger,
-            } => {
-                let entry = decode_account_storage(&ledger_key(&contract, request), value)
-                    .map_err(|error| {
-                        RpcError::UndecodableAccountStorage(format!(
-                            "archived account entry {request:?} has invalid pinned storage: {error}"
-                        ))
-                    })?;
-                AccountEntryStatus::Archived {
-                    entry,
-                    last_modified_ledger: *last_modified_ledger,
-                }
-            }
-            ContractDataStatus::Present {
-                value,
-                last_modified_ledger,
-                live_until_ledger,
-            } => {
-                let entry = decode_account_storage(&ledger_key(&contract, request), value)
-                    .map_err(|error| {
-                        RpcError::UndecodableAccountStorage(format!(
-                            "account entry {request:?} has invalid pinned storage: {error}"
-                        ))
-                    })?;
-                AccountEntryStatus::Present {
-                    entry,
-                    last_modified_ledger: *last_modified_ledger,
-                    live_until_ledger: *live_until_ledger,
-                }
-            }
-        };
         statuses.insert(request, status);
     }
     Ok(AccountEntryPage {
@@ -172,6 +131,68 @@ pub(crate) fn read_account_entry_page<T: RpcTransport>(
         entries: statuses,
         witnesses,
     })
+}
+
+/// Decode one requested key's status against the pinned schema, with the digest witness of an
+/// omitted or live entry. A returned archived entry is decoded but has no witness: the scanner
+/// refuses it before building a digest. `payload` is the validated entry XDR of a returned key.
+pub(crate) fn decode_account_entry(
+    contract: &ContractId,
+    request: AccountEntryKey,
+    status: &ContractDataStatus,
+    payload: Option<&[u8]>,
+) -> Result<(AccountEntryStatus, Option<LedgerWitness>), RpcError> {
+    let witness = match status {
+        ContractDataStatus::Absent => Some(LedgerWitness::Absent),
+        ContractDataStatus::Present {
+            value: _,
+            last_modified_ledger,
+            live_until_ledger,
+        } => Some(LedgerWitness::Present {
+            entry_data_xdr: payload.map(<[u8]>::to_vec).ok_or_else(|| {
+                RpcError::Malformed("present account entry lacks validated payload".into())
+            })?,
+            last_modified_ledger: *last_modified_ledger,
+            live_until_ledger: *live_until_ledger,
+        }),
+        ContractDataStatus::Archived { .. } => None,
+    };
+    let status = match status {
+        ContractDataStatus::Absent => AccountEntryStatus::Absent,
+        ContractDataStatus::Archived {
+            value,
+            last_modified_ledger,
+        } => {
+            let entry =
+                decode_account_storage(&ledger_key(contract, request), value).map_err(|error| {
+                    RpcError::UndecodableAccountStorage(format!(
+                        "archived account entry {request:?} has invalid pinned storage: {error}"
+                    ))
+                })?;
+            AccountEntryStatus::Archived {
+                entry,
+                last_modified_ledger: *last_modified_ledger,
+            }
+        }
+        ContractDataStatus::Present {
+            value,
+            last_modified_ledger,
+            live_until_ledger,
+        } => {
+            let entry =
+                decode_account_storage(&ledger_key(contract, request), value).map_err(|error| {
+                    RpcError::UndecodableAccountStorage(format!(
+                        "account entry {request:?} has invalid pinned storage: {error}"
+                    ))
+                })?;
+            AccountEntryStatus::Present {
+                entry,
+                last_modified_ledger: *last_modified_ledger,
+                live_until_ledger: *live_until_ledger,
+            }
+        }
+    };
+    Ok((status, witness))
 }
 
 pub(super) fn ledger_key(contract: &ContractId, request: AccountEntryKey) -> LedgerKeyContractData {

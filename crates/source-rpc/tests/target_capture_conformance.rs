@@ -118,14 +118,13 @@ fn a_captured_native_transfer_response_set_binds_header_config_and_entries() {
         [
             "getNetwork",
             "simulateTransaction",
-            "getNetwork",
             "getLedgerEntries",
             "getLedgers"
         ]
     );
     assert_eq!(calls[1].1["authMode"], "record");
     assert_eq!(calls[1].1["transaction"], envelope());
-    assert_eq!(calls[4].1["startLedger"], capture.observed_ledger);
+    assert_eq!(calls[3].1["startLedger"], capture.observed_ledger);
     // The live account runs the pinned account release.
     assert_eq!(
         capture.account_code_hash,

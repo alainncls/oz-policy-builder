@@ -1,14 +1,15 @@
 //! Exact contract code observations for a bounded set of contract instances.
 //!
 //! This is a prerequisite for an account authority scanner, not a rule-state snapshot. RPC's
-//! `latestLedger` is the latest sequence known when it handled the request; its documented
-//! response does not prove that every returned entry belongs to one coherent ledger state.
-//! In particular, this value cannot be used to construct a trusted `AccountState` or a Safe
-//! authority verdict without a separate snapshot and rule-enumeration protocol.
+//! `latestLedger` is the ledger the endpoint says it read the request at; it is endpoint
+//! metadata, not a proof that the returned entries are one coherent ledger state, so this
+//! value cannot by itself construct a trusted `AccountState` or a Safe authority verdict. The
+//! per-instance checks here (live at the reported ledger, a Wasm executable) are shared with
+//! the account scan, which reads instances in the same response as the account's storage.
 
 use super::{
-    ledger_witness::LedgerWitness, parse_contract_executables, verify_network, xdr_limits,
-    ObservedExecutable, RpcError, RpcTransport, MAX_LEDGER_ENTRY_KEYS,
+    instance_executable, ledger_witness::LedgerWitness, parse_contract_executables, require_live,
+    verify_network, xdr_limits, ObservedExecutable, RpcError, RpcTransport, MAX_LEDGER_ENTRY_KEYS,
 };
 use ozpb_domain::{Hash32, LedgerSeq, NetworkId};
 use serde_json::json;
@@ -101,11 +102,7 @@ pub(crate) fn read_contract_wasm_hashes_with_witnesses<T: RpcTransport>(
             "getLedgerEntries reported ledger zero for deployed contract instances".to_string(),
         ));
     }
-    let observations =
-        parse_contract_executables(&result, &requested).map_err(|error| match error {
-            RpcError::Evidence(message) => RpcError::CodeRead(message),
-            other => other,
-        })?;
+    let observations = parse_contract_executables(&result, &requested).map_err(code_read)?;
     // A contract instance is persistent storage. Require its TTL metadata to be present and
     // still live at the reported ledger, instead of silently accepting an archived entry.
     let entries = result["entries"]
@@ -127,11 +124,7 @@ pub(crate) fn read_contract_wasm_hashes_with_witnesses<T: RpcTransport>(
                     "getLedgerEntries entry {index} liveUntilLedgerSeq exceeds u32"
                 ))
             })?;
-        if live_until < reported_latest_ledger {
-            return Err(RpcError::CodeRead(format!(
-                "getLedgerEntries entry {index} is not live at reported ledger {reported_latest_ledger}"
-            )));
-        }
+        require_live(index, live_until, reported_latest_ledger).map_err(code_read)?;
         let key = entry["key"]
             .as_str()
             .ok_or_else(|| RpcError::Malformed(format!("entry {index} has no string key")))?;
@@ -176,11 +169,7 @@ pub(crate) fn read_contract_wasm_hashes_with_witnesses<T: RpcTransport>(
 
     let mut wasm_hashes = BTreeMap::new();
     for (address, observation) in observations {
-        let ObservedExecutable::Wasm { code_hash } = observation.executable else {
-            return Err(RpcError::CodeRead(format!(
-                "contract {address} does not run a Wasm executable"
-            )));
-        };
+        let code_hash = wasm_hash(&address, observation.executable)?;
         wasm_hashes.insert(address, code_hash);
     }
     Ok((
@@ -191,4 +180,34 @@ pub(crate) fn read_contract_wasm_hashes_with_witnesses<T: RpcTransport>(
         },
         witnesses,
     ))
+}
+
+/// The code hash of one returned contract instance, as this reader would accept it: live at
+/// the ledger its response reports and running Wasm. The account scan's closure read uses it
+/// for every policy, verifier and candidate instance in its response.
+pub(crate) fn live_wasm_hash(
+    index: usize,
+    address: &str,
+    value: ScVal,
+    live_until_ledger: u32,
+    reported_latest_ledger: u32,
+) -> Result<Hash32, RpcError> {
+    require_live(index, live_until_ledger, reported_latest_ledger).map_err(code_read)?;
+    wasm_hash(address, instance_executable(index, address, value)?)
+}
+
+fn wasm_hash(address: &str, executable: ObservedExecutable) -> Result<Hash32, RpcError> {
+    let ObservedExecutable::Wasm { code_hash } = executable else {
+        return Err(RpcError::CodeRead(format!(
+            "contract {address} does not run a Wasm executable"
+        )));
+    };
+    Ok(code_hash)
+}
+
+fn code_read(error: RpcError) -> RpcError {
+    match error {
+        RpcError::Evidence(message) => RpcError::CodeRead(message),
+        other => other,
+    }
 }

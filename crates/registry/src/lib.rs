@@ -140,8 +140,9 @@ pub enum AccountArchivePolicy {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AccountSnapshotPolicy {
-    /// Require matching endpoint ledger metadata across batches and a matching account
-    /// instance on a final read. The endpoint remains the trust boundary.
+    /// Every value comes from one endpoint ledger: one `getLedgerEntries` response, or, for
+    /// more than 200 keys, several reporting the same ledger with a matching instance re-read.
+    /// The endpoint remains the trust boundary.
     SameLedgerAndInstance,
 }
 
