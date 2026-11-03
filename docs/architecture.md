@@ -605,8 +605,10 @@ impl GeneratedPolicy {
     (`policy_address_rule_can_uninstall_and_call_surface_refuses_it` in
     `contracts/differential/tests/account_wasm_invariants.rs`).
     `check_policy_call_surface` lists every such rule before installation and refuses one the
-    agent's key can use alone. A rule added after installation is not monitored (see "full
-    call-surface monitoring" in [`SCOPE.md`](SCOPE.md)). The guarantee stated to a user must be
+    agent's key can use alone. A rule added later is detected only when someone runs the
+    wallet's [on-demand check](POLLYWALLET-INTEGRATION.md#on-demand-installed-grant-monitoring),
+    and only for a grant installed by the running backend; it counts any later rule allocation
+    as drift. Nothing monitors in the background. The guarantee stated to a user must be
     "per installation", never "lifetime".
 - **Rendering safety:** all symbols, strings, bytes, and `ScVal` values from recordings are
   untrusted data. They are never interpolated into Rust identifiers, and they reach a string
@@ -799,11 +801,11 @@ policy."*
 ### 4.8 Wallet integration (`wallet/`)
 
 > **Scope: Tranche 2.** Authority/intent/assembly operations, supported wallet dry-run and
-> live checks, installation and revocation are implemented. This section describes the design;
-> it is not a claim that every account, policy or target shape is supported. Replacement and
-> monitoring updates are prepared in PRs #97–#98. [POLLYWALLET-INTEGRATION.md](POLLYWALLET-INTEGRATION.md)
-> describes the integrated flow, and the [acceptance crosswalk](TRANCHE-2-VERIFICATION.md#integrated-code-versus-pending-pull-requests)
-> distinguishes pending code from delivered-revision evidence.
+> live checks, installation, revocation, revoke-first replacement and on-demand monitoring are
+> implemented. This section describes the design; it is not a claim that every account, policy
+> or target shape is supported. [POLLYWALLET-INTEGRATION.md](POLLYWALLET-INTEGRATION.md)
+> describes the integrated flow, and the [acceptance crosswalk](TRANCHE-2-VERIFICATION.md#contracted-outcome-and-milestone-boundary)
+> distinguishes implemented code from delivered-revision evidence.
 
 Target stack (the current OZ smart-account generation):
 

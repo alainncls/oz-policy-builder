@@ -32,16 +32,16 @@ checks and the separate live integration evidence still required for the second 
 
 The [contracted testnet milestone](https://github.com/gateway-fm/oz-policy-builder/issues/3)
 is not complete. The integrated tree includes dry-run execution, testnet walkthroughs,
-agent/wallet handoff, wallet install/revoke and self-hosting/worker packages. Additional
-walkthrough, wallet and dependency updates are prepared in PRs #95–#99; see the
+agent/wallet handoff, wallet install/revoke, revoke-first replacement and on-demand
+monitoring, and self-hosting/worker packages; see the
 [acceptance crosswalk](docs/TRANCHE-2-VERIFICATION.md#contracted-outcome-and-milestone-boundary)
-for the integrated baseline, pending increments and remaining evidence.
+for what is implemented and the evidence still required.
 
 A deployed hosted testnet MCP endpoint and its operational checks, final-revision reports,
 remaining invariant coverage, the executed agent workflow,
-and the public demo/video still
-need closure. The production versioned release (self-hostable; Gateway operates no service),
-audit remediation, OpenZeppelin sign-off and mainnet wallet integration are
+and the public demo/video still need closure. The production versioned release
+(self-hostable; Gateway operates no service), audit remediation, OpenZeppelin sign-off
+and mainnet wallet integration are
 [Tranche 3](https://github.com/gateway-fm/oz-policy-builder/issues/4).
 
 ## The pipeline

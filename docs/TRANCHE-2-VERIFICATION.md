@@ -20,7 +20,7 @@ that design, rather than silently counted as complete or moved to the next miles
 | W1: Blend yield claim | Supply-position setup, nonzero claim, withdrawal and historical live derived-denial evidence are recorded in the [protocol walkthrough](WALKTHROUGH-PROTOCOLS.md). A passing run at revision `60e1da70` on 30 October 2026 includes the per-rule account-Wasm report ([testnet evidence §19](TESTNET-EVIDENCE-TRANCHE-2.md#19-controlled-blend-claim-run-30-october-2026)), and another passed at revision `86854cee` on 1 November 2026 ([§21](TESTNET-EVIDENCE-TRANCHE-2.md#21-controlled-blend-claim-run-1-november-2026)); that emission schedule ends on 2 November 2026. | Fresh target/emissions preflight and delivered-revision permit/deny/lifecycle reports. A zero-reward claim is not a passing positive case. |
 | W2: SEP-41 subscription | The [subscription walkthrough](WALKTHROUGH-SEP41.md) composes the generated scope policy and the exact pinned spending-limit policy, with historical live permit/deny and revocation evidence and passing runs at revision `60e1da70` on 30 October 2026 ([testnet evidence §18](TESTNET-EVIDENCE-TRANCHE-2.md#18-controlled-sep-41-run-30-october-2026)) and at revision `86854cee` on 1 November 2026 ([§22](TESTNET-EVIDENCE-TRANCHE-2.md#22-controlled-sep-41-run-1-november-2026)). | Delivered-revision reports; explicitly retain the unsupported composed account-Wasm layer rather than treating native-transfer coverage as composition coverage. |
 | W3: bounded Soroswap | Two independent rules, explicit floor/cap decisions, a code-hash-bound router adapter that keeps the recorded deadline exact (`soroswap-router@2`), route/recipient/function controls and live derived denials exist. A passing run at revision `60e1da70` on 30 October 2026 refused deadline plus one and the maximum deadline with the router-rule policy's code 6 ([testnet evidence §17](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)), as did a passing run at revision `86854cee` on 1 November 2026 ([§23](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026)). | Retain delivered-revision reports, tuple-cross-product applicability/coverage and the development-registry/source-reproduction limit below. |
-| Wallet integration | [Pollywallet integration](POLLYWALLET-INTEGRATION.md) imports, checks, deploys, installs and revokes a supported native-transfer grant; automated virtual-passkey testnet runs are retained. | Integrate the pending wallet work below and record its current behavior and refusals. Distinguish automated signature mechanics from an actual user's permission decisions. |
+| Wallet integration | [Pollywallet integration](POLLYWALLET-INTEGRATION.md) imports, checks, deploys, installs, revokes, replaces (revoke-first) and checks on demand a supported native-transfer grant; automated virtual-passkey testnet runs are retained. | Record current installation, replacement and monitoring behavior and refusals at the delivered revision. Distinguish automated signature mechanics from an actual user's permission decisions. |
 | Hosted testnet endpoint | Authenticated HTTP, per-tool quotas, request cancellation, TLS packaging and disposable build workers have unit, container or containment tests. | A running reachable testnet service, a published self-hostable image and acceptance checks against that deployed service. A container build is not a deployment. |
 | Public demo and video with passing reports | Walkthrough runners and historical records exist. | Assemble the final demonstration, reports and artifact inventory; record and publish the video. This is an explicit deliverable. |
 
@@ -32,23 +32,6 @@ The full documentation/test-suite delivery is also listed there. Tranche 2 still
 usage, test coverage, limitations and reproduction instructions for what it actually ships.
 Monitoring, revocation, stateful-overlap handling and isolated testnet hosting are already
 part of the public Phase 2 design; they are not new mainnet prerequisites added here.
-
-### Integrated code versus pending pull requests
-
-Status checked on **28 October 2026** against public `main` after PR #64. The following
-independently reviewed increments are open, not integrated into that baseline. Their CI or
-branch-local results must not be presented as evidence for an unchanged `main` checkout.
-
-| Pull request | Prepared increment | Integration/evidence still needed |
-| --- | --- | --- |
-| [#95](https://github.com/gateway-fm/oz-policy-builder/pull/95) | W1/W3 per-rule account-Wasm report gate and bound evidence export | Merge and rerun the walkthroughs at the delivered revision. |
-| [#96](https://github.com/gateway-fm/oz-policy-builder/pull/96) | Wallet per-case evidence, refusal parity and explicit acceptance | Merge and repeat the wallet acceptance run. |
-| [#97](https://github.com/gateway-fm/oz-policy-builder/pull/97) | Verified revoke-first replacement with explicit fresh-budget acknowledgement | Stacked on #96; integrate and exercise the complete replacement lifecycle. |
-| [#98](https://github.com/gateway-fm/oz-policy-builder/pull/98) | On-demand installed-grant monitoring and consented drift removal | Stacked on #97; integrate and retain current observations/refusals within its stated modeled-authority scope. |
-| [#99](https://github.com/gateway-fm/oz-policy-builder/pull/99) | Supported generated-policy/contract-test SDK migration with pinned-account compatibility checks | Integrate the changed build hashes and helper rollout before final evidence. It does not remove the temporary crypto advisory exception. |
-
-PR status changes over time; follow the linked PRs for their current heads and reviews.
-Historical evidence keeps its original revision, hashes and limitations.
 
 ### Deviations and open gaps against the Phase 2 design
 
