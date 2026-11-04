@@ -30,6 +30,18 @@ else
     echo "OFFLINE MODE: stellar-cli build/reproducibility and cargo-deny license gates will not run"
 fi
 
+# A review records `git status --short` beside this gate's result, so the gate must not edit the
+# tree it checks: a lockfile cargo rewrote along the way would read as the reviewer's own change.
+# Snapshot tracked content now and compare at the end. Only at the root of a checkout with a
+# commit (asked of git, not by comparing paths, which differ in case on macOS), so a source
+# archive unpacked inside some other repository is not compared against that repository.
+tracked_state() { git diff HEAD --binary --no-ext-diff --no-textconv | git hash-object --stdin; }
+TRACKED_BEFORE=""
+if prefix="$(git rev-parse --show-prefix 2>/dev/null)" && [ -z "$prefix" ] \
+    && git rev-parse -q --verify HEAD >/dev/null; then
+    TRACKED_BEFORE="$(tracked_state)"
+fi
+
 echo "== 1. dependency rules (evaluator ↛ codegen; cores transport-free) =="
 bash scripts/check-dep-rules.sh
 bash scripts/test-check-dep-rules.sh
@@ -53,21 +65,25 @@ python3 scripts/test-check-wasm-exports.py
 # `--all` covers only the current workspace. The two generated crates are excluded from
 # `contracts` so they can carry standalone release profiles. Name both explicitly for fmt and
 # clippy, as CI does; compiling one as a dependency does not lint or reliably format it.
+#
+# Every command below that resolves a workspace passes --locked, so a lockfile that no longer
+# matches its manifests fails here instead of being rewritten in the tree under review. fmt does
+# not resolve, and cargo-machete has no such flag; step 9 catches whatever still writes.
 echo "== 2. fmt + clippy (fmt/clippy gates are part of the contract, §4.11) =="
 cargo fmt --all --check
 ( cd contracts && cargo fmt --all --check )
 ( cd contracts/golden-transfer-policy && cargo fmt --all --check )
 ( cd contracts/soroswap-swap-policy && cargo fmt --all --check )
-cargo clippy --workspace --all-targets -- -D warnings
-( cd contracts && cargo clippy --all-targets -- -D warnings )
-( cd contracts/golden-transfer-policy && cargo clippy --all-targets -- -D warnings )
-( cd contracts/soroswap-swap-policy && cargo clippy --all-targets -- -D warnings )
+cargo clippy --locked --workspace --all-targets -- -D warnings
+( cd contracts && cargo clippy --locked --all-targets -- -D warnings )
+( cd contracts/golden-transfer-policy && cargo clippy --locked --all-targets -- -D warnings )
+( cd contracts/soroswap-swap-policy && cargo clippy --locked --all-targets -- -D warnings )
 
 echo "== 3. host workspace test suite (TDD) =="
-cargo test --workspace
+cargo test --locked --workspace
 
 echo "== 4. contracts: differential suite (evaluator vs real compiled policy) =="
-( cd contracts && cargo test -p ozpb-differential )
+( cd contracts && cargo test --locked -p ozpb-differential )
 
 echo "== 5. determinism: codegen is byte-identical and both committed crates are in step =="
 # The shared CI/release check runs each full test name with --exact and requires one passing
@@ -77,8 +93,8 @@ bash scripts/check-codegen-fixtures.sh
 # compiles the policy, so it needs the toolchain.
 if [ "$MODE" = release ]; then
     rm -rf target/det-a target/det-b
-    cargo run -q -p ozpb-cli -- generate --spec docs/examples/subscription-spec.json --rule 0 --out target/det-a
-    cargo run -q -p ozpb-cli -- generate --spec docs/examples/subscription-spec.json --rule 0 --out target/det-b
+    cargo run --locked -q -p ozpb-cli -- generate --spec docs/examples/subscription-spec.json --rule 0 --out target/det-a
+    cargo run --locked -q -p ozpb-cli -- generate --spec docs/examples/subscription-spec.json --rule 0 --out target/det-b
     # Every emitted source file, digested together. The crate root is a header and a `pub mod`
     # declaration, so hashing it alone would compare the half that does not vary with the rule —
     # a determinism check that passes because it is looking at the wrong file.
@@ -133,18 +149,18 @@ if [ "$MODE" = release ]; then
     # same hash, because they are built in different contexts.
     G=contracts/golden-transfer-policy
     W="$G/target/wasm32v1-none/release/generated_sub_transfer_r0.wasm"
-    ( cd "$G" && stellar contract build >/dev/null 2>&1 )
+    ( cd "$G" && stellar contract build --locked >/dev/null 2>&1 )
     H1=$(shasum -a 256 "$W" | cut -d' ' -f1)
     ( cd "$G" && cargo clean >/dev/null 2>&1 )
     # Non-vacuity: if the artifact survives the clean, the rebuild below proves nothing.
     [ -f "$W" ] && { echo "  cargo clean did not remove the wasm — this gate would be vacuous"; exit 1; }
-    ( cd "$G" && stellar contract build >/dev/null 2>&1 )
+    ( cd "$G" && stellar contract build --locked >/dev/null 2>&1 )
     H2=$(shasum -a 256 "$W" | cut -d' ' -f1)
     [ "$H1" = "$H2" ] && echo "  wasm byte-identical across a full clean rebuild: $H1" \
         || { echo "  WASM DIFFERS: $H1 vs $H2"; exit 1; }
 
     echo "== 6b. real builder boundary + metadata reconciliation tests =="
-    cargo test -p ozpb-build-runner -- --ignored --test-threads=1
+    cargo test --locked -p ozpb-build-runner -- --ignored --test-threads=1
 else
     echo "  OFFLINE: wasm reproducibility not run"
     echo "  OFFLINE: ignored real-builder tests not run"
@@ -162,6 +178,17 @@ if [ "$MODE" = release ]; then
     bash scripts/check-unused-deps.sh
 else
     echo "  OFFLINE: cargo-machete unused-dependency gate not run"
+fi
+
+echo "== 9. the gate left tracked files as it found them =="
+if [ -z "$TRACKED_BEFORE" ]; then
+    echo "  not run: not at the root of a git checkout"
+elif [ "$(tracked_state)" != "$TRACKED_BEFORE" ]; then
+    echo "  THIS GATE MODIFIED TRACKED FILES (the list includes any edits made before the run):" >&2
+    git status --short --untracked-files=no >&2
+    exit 1
+else
+    echo "  tracked files unchanged"
 fi
 
 if [ "$MODE" = release ]; then

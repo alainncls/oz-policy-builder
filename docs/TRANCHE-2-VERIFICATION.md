@@ -80,9 +80,10 @@ bash scripts/verify-phase2.sh
 
 It runs Phase 1's formatting, lint, test, deterministic-build, and dependency checks; the
 focused evidence checks below; and a Stellar CLI build of the committed Soroswap policy.
-Missing release tools, failed builds, missing Wasm output, and failed evidence checks stop
-the command. Success ends with `AUTOMATED PHASE 2 CHECKS PASSED (release mode)` and a reminder
-of the separate live evidence requirements.
+Missing release tools, failed builds, missing Wasm output, failed evidence checks, and a run
+that changes tracked files stop the command. Success ends with
+`AUTOMATED PHASE 2 CHECKS PASSED (release mode)` and a reminder of the separate live evidence
+requirements.
 
 For a reduced local check:
 

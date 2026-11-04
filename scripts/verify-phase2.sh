@@ -15,6 +15,13 @@ if [ "$#" -gt 1 ]; then
 fi
 
 command -v python3 >/dev/null 2>&1 || { echo "this gate requires python3 in every mode" >&2; exit 1; }
+# Same tracked-file comparison as the Phase 1 gate, over this whole command.
+tracked_state() { git diff HEAD --binary --no-ext-diff --no-textconv | git hash-object --stdin; }
+TRACKED_BEFORE=""
+if prefix="$(git rev-parse --show-prefix 2>/dev/null)" && [ -z "$prefix" ] \
+    && git rev-parse -q --verify HEAD >/dev/null; then
+    TRACKED_BEFORE="$(tracked_state)"
+fi
 if [ "$MODE" = release ]; then
     for tool in stellar cargo-deny cargo-machete; do
         command -v "$tool" >/dev/null 2>&1 || {
@@ -49,6 +56,17 @@ print("W3 Wasm build produced a module (compilation evidence, not live execution
 PY
 else
     echo "OFFLINE: W3 Wasm build not run; Phase 1 release-only checks were also omitted"
+fi
+
+echo "== the gate left tracked files as it found them =="
+if [ -z "$TRACKED_BEFORE" ]; then
+    echo "  not run: not at the root of a git checkout"
+elif [ "$(tracked_state)" != "$TRACKED_BEFORE" ]; then
+    echo "  THIS GATE MODIFIED TRACKED FILES (the list includes any edits made before the run):" >&2
+    git status --short --untracked-files=no >&2
+    exit 1
+else
+    echo "  tracked files unchanged"
 fi
 
 echo "AUTOMATED PHASE 2 CHECKS PASSED ($MODE mode)"
