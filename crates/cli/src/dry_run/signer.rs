@@ -245,7 +245,7 @@ pub(crate) mod tests {
             )
             .0
             .to_hex(),
-            source_protocol_version: 29,
+            source_protocol_version: 30,
             source_ledger: 1000,
             account_address: stellar_strkey::Contract([5; 32])
                 .to_string()

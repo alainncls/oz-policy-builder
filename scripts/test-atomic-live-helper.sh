@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real owner/delegate authorization and SAC effects in an isolated protocol-29 host.
+# Real owner/delegate authorization and SAC effects in an isolated protocol-30 host.
 # This script neither contacts an RPC nor produces live signatures/submissions.
 set -euo pipefail
 cd "$(dirname "$0")/.."

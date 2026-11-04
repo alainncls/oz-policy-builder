@@ -42,7 +42,7 @@ pub fn canonical_hex<const N: usize>(value: &str) -> RuntimeResult<[u8; N]> {
 }
 
 pub fn offline_network(binding: &OfflineBinding) -> RuntimeResult<String> {
-    if binding.source_protocol_version != 29 || binding.source_ledger == 0 {
+    if binding.source_protocol_version != 30 || binding.source_ledger == 0 {
         return Err("unsupported source protocol or ledger".into());
     }
     for value in [

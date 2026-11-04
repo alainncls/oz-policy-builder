@@ -437,7 +437,7 @@ with the Blend mode, on 1 November 2026 at `86854cee` (sections 21–23).
 
 **Not shown, or not as you might assume:**
 
-- **The default pipeline now synthesizes the grant.** Protocol 29 is supported by the RPC
+- **The default pipeline now synthesizes the grant.** Protocols through 30 are supported by the RPC
   recorder. Its executable observations are acquired after the transaction, so they describe
   the endpoint's later state, not an authenticated historical state. `synthesize` verifies
   raw/decoded coherence, resolves the registry and treats supplied JSON as `self_supplied`.

@@ -29,7 +29,7 @@ use stellar_xdr::{
 };
 
 /// The only source protocol whose captured state the execution runtime reproduces.
-const CAPTURE_PROTOCOL: u32 = 29;
+const CAPTURE_PROTOCOL: u32 = 30;
 /// Simulation and the entry read may observe different ledgers; retry once, then give up.
 const CAPTURE_ATTEMPTS: usize = 2;
 /// Bound on the captured entry payload carried into an execution job.

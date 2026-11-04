@@ -14,7 +14,7 @@ const H = (n) => n.repeat(64);
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const ACCOUNT = StrKey.encodeContract(Buffer.alloc(32, 3));
 const POLICY = StrKey.encodeContract(Buffer.alloc(32, 5));
-const LEDGER = 5294840;
+const LEDGER = 5553674;
 
 function spec({ contract = SAC, args, allowed, rules } = {}) {
   const call = { fn: 'transfer', args: args ?? [
@@ -104,7 +104,7 @@ test('a capture is accepted only for the review\'s exact call, network, account 
   assert.equal(checked.captureHash, hash);
   assert.equal(checked.observedLedger, LEDGER);
   assert.equal(checked.ledger.sequence, LEDGER);
-  assert.equal(checked.ledger.protocol_version, 29);
+  assert.equal(checked.ledger.protocol_version, 30);
   assert.match(checked.ledger.timestamp, /^[1-9][0-9]*$/);
   assert.ok(Object.isFrozen(checked));
 });
@@ -234,7 +234,7 @@ for (const [name, change] of [
   ['another observed ledger', (r) => { r.observed_ledger++; }],
   ['another storage mode', (r) => { r.storage_mode = 'snapshot'; }],
   ['changed provenance', (r) => { r.provenance = 'live'; }],
-  ['another host', (r) => { r.host_version = 'soroban-env-host/30.0.0'; }],
+  ['another host', (r) => { r.host_version = 'soroban-env-host/31.0.0'; }],
   ['a failed report', (r) => { r.passed = false; }],
   ['a completion claim', (r) => { r.complete = true; }],
   ['an extra field', (r) => { r.installation_ready = true; }],

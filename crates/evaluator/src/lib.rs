@@ -432,6 +432,24 @@ mod tests {
     }
 
     #[test]
+    fn protocol30_muxed_contract_is_not_the_allowed_plain_self_address() {
+        let mut invocation = original_invocation();
+        let ScAddress::Contract(contract_id) = fixtures::ACCOUNT.parse::<ScAddress>().unwrap()
+        else {
+            panic!("contract fixture")
+        };
+        let value = ScVal::Address(ScAddress::MuxedContract(stellar_xdr::MuxedContract {
+            id: 7,
+            contract_id,
+        }));
+        invocation.args[0] = ArgValue::ScvalXdr(value.to_xdr_base64(Limits::none()).unwrap());
+        assert_eq!(
+            evaluate(&validated(), &base_ctx(), &invocation),
+            Verdict::Deny(DenyReason::NoTupleMatched)
+        );
+    }
+
+    #[test]
     fn original_recorded_invocation_permits() {
         let v = evaluate(&validated(), &base_ctx(), &original_invocation());
         assert_eq!(v, Verdict::Permit);

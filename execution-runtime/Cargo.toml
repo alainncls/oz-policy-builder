@@ -12,7 +12,7 @@ publish = false
 [dependencies]
 # The execution host follows the captured network protocol. Contract generation
 # is pinned independently to SDK 28; only canonical XDR crosses this boundary.
-soroban-sdk = { version = "=29.0.1", features = ["testutils"] }
+soroban-sdk = { version = "=30.0.0-rc.1", features = ["testutils"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hex = "0.4"

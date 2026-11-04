@@ -145,7 +145,7 @@ grep -qx 'test signed_candidate_executes_captured_target_and_denies_adjacent_amo
 }
 
 # Reuse the already verified public account artifact; build the worker's own
-# candidate fixture and require actual protocol-29 authorization and framing.
+# candidate fixture and require actual protocol-30 authorization and framing.
 OZPB_ACCOUNT_WASM="$account_wasm" bash scripts/test-native-execution.sh
 OZPB_ACCOUNT_WASM="$account_wasm" bash scripts/test-atomic-live-helper.sh
 

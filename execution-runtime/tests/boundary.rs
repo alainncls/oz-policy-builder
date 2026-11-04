@@ -11,7 +11,7 @@ fn binding() -> OfflineBinding {
         )
         .0
         .to_hex(),
-        source_protocol_version: 29,
+        source_protocol_version: 30,
         source_ledger: 1000,
         account_address: stellar_strkey::Contract([5; 32])
             .to_string()
@@ -45,7 +45,7 @@ fn offline_domain_binds_the_exact_run_state_and_protocol() {
     let domain = offline_network(&input).unwrap();
     assert_eq!(
         domain,
-        "82de4f9720d9cb3f3c5d8492fce77ab1444ce378288c4b59f9a482e5b6078dc4"
+        "4ebfdc6e919ebb59bd9dc7422982b38c1dcbf2fd1afaaf91cd603025bc0dca22"
     );
     assert_ne!(domain, input.source_network_id);
     for change in [
@@ -115,4 +115,13 @@ fn framing_and_signatures_reject_truncation_wrong_keys_and_replays() {
     let mut corrupt = response;
     corrupt.signature_hex = "00".repeat(64);
     assert!(verify_signature_response(&request, &corrupt).is_err());
+}
+
+#[test]
+fn historical_and_future_execution_protocols_are_refused() {
+    for protocol in [29, 31] {
+        let mut value = binding();
+        value.source_protocol_version = protocol;
+        assert!(offline_network(&value).is_err(), "protocol {protocol}");
+    }
 }

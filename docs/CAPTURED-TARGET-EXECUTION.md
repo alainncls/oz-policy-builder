@@ -4,7 +4,7 @@ The `captured_target` layer runs the candidate's exact native Stellar Asset Cont
 transfer through the pinned account Wasm and the generated policy Wasm, against target ledger
 entries captured from an RPC endpoint. It extends the
 [native execution worker](NATIVE-EXECUTION.md): the candidate installation is the same fresh
-local state, the target state is byte-exact captured data, and the protocol-29 host executes
+local state, the target state is byte-exact captured data, and the protocol-30 host executes
 the real built-in SAC. It is an offline
 counterfactual. It is not a historical replay, an owner-authority check, a fee, reserve or
 resource check, or live-network acceptance, and its result is always `complete: false`.
@@ -51,7 +51,7 @@ at `L + 1` or later, where an entry living only until `L` is archived. Entries a
 canonically, so a non-canonical encoding is normalised rather than refused. An omitted key is
 refused because the endpoint does not distinguish absence from archival. `getLedgers` supplies
 the header for exactly `L`; its canonical bytes must hash to the hash reported beside it and
-state the sequence, protocol 29 and close time. That proves only that the header is
+state the sequence, protocol 30 and close time. That proves only that the header is
 self-consistent: it is not chained to other ledgers or tied to the entries, and whoever builds
 a job could recompute it. If the simulation and the entry read report different ledgers the
 capture retries once, then fails.
@@ -207,7 +207,7 @@ a local HTTP endpoint through each shell's operator source configuration, and
 `bash scripts/test-wallet-native-execution.sh` drives the wallet backend's checks of the capture
 and of both worker modes with them. `bash scripts/test-captured-target.sh`
 generates four real policies and requires every actual-Wasm test to run and pass: the fixture
-capture (a real SDK-29 SAC deployment built locally), the same with an uncapped rule, a capture
+capture (a real SDK-30 SAC deployment built locally), the same with an uncapped rule, a capture
 whose sender cannot cover the amount, a rule paying the delegate itself (refused as overlapping
 candidate state), twenty preparation refusals including re-hashed headers that describe another
 ledger, the recorded testnet capture replayed offline, and the full process protocol. The

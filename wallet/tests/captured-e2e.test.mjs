@@ -20,7 +20,7 @@ import { WalletToolchain } from '../server/toolchain.mjs';
 const { OZPB_CAPTURED_E2E_CLI: cli, OZPB_CAPTURED_E2E_RUNTIME: runtime, OZPB_CAPTURED_E2E_WORK: work } = process.env;
 const skip = !(cli && runtime && work) && 'requires scripts/test-wallet-native-execution.sh';
 const examples = new URL('../../docs/examples/', import.meta.url);
-const recorded = new URL('../../crates/source-rpc/tests/captured-testnet/target-capture/', import.meta.url);
+const recorded = new URL('../../crates/source-rpc/tests/captured-testnet/target-capture-protocol30/', import.meta.url);
 const FILES = ['Cargo.toml', 'rust-toolchain.toml', 'rustfmt.toml', 'src/lib.rs', 'src/contract.rs'];
 const POLICY = 'CAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAUCRUA6';
 const NETWORK = 'Test SDF Network ; September 2015';

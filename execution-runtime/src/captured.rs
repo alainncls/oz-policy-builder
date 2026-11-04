@@ -1114,7 +1114,7 @@ pub fn execute_captured(
         account_code_hash: execution.account_code_hash.clone(),
         policy_address: execution.policy_address.clone(),
         policy_code_hash: execution.policy_code_hash.clone(),
-        host_version: "soroban-env-host/29.0.1".into(),
+        host_version: "soroban-env-host/30.0.0".into(),
         local_rule_id: LOCAL_RULE_ID,
         candidate_context_rule_id: execution.candidate_context_rule_id,
         storage_mode: STORAGE_MODE.into(),

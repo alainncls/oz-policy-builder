@@ -10,7 +10,7 @@ if (process.argv.length !== 3 || !isAbsolute(checkout) || realpathSync(checkout)
   throw new Error('Usage: node scripts/test-pollywallet-browser.mjs /absolute/applied/pollywallet');
 }
 const nested = JSON.parse(readFileSync(join(checkout, 'src/policy-builder/package.json')));
-assert.equal(nested.dependencies['@stellar/stellar-sdk'], '17.2.1');
+assert.equal(nested.dependencies['@stellar/stellar-sdk'], '17.4.0');
 const channel = process.env.OZPB_BROWSER_CHANNEL;
 if (channel !== undefined && !['chrome', 'chromium'].includes(channel)) throw new Error('Unsupported browser channel');
 const name = `ozpb-browser-check-${randomBytes(8).toString('hex')}.mjs`;

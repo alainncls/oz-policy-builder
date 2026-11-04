@@ -59,7 +59,7 @@ elif mode == "job":
         },
         "account_wasm_base64": base64.b64encode(account).decode(),
         "ledger": {
-            "protocol_version": 29, "sequence": 1000, "timestamp": "100000",
+            "protocol_version": 30, "sequence": 1000, "timestamp": "100000",
             "base_reserve": 5000000, "min_temp_entry_ttl": 16,
             "min_persistent_entry_ttl": 4096, "max_entry_ttl": 631200,
         },

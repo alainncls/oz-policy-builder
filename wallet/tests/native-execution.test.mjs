@@ -107,7 +107,7 @@ for (const [name, change] of [
   ['changed required classes', (r) => { r.required_classes = ['original']; }],
   ['other binding', (r) => { r.binding.job_hash = H('f'); }],
   ['other policy', (r) => { r.policy_code_hash = H('f'); }],
-  ['other host', (r) => { r.host_version = 'soroban-env-host/30.0.0'; }],
+  ['other host', (r) => { r.host_version = 'soroban-env-host/31.0.0'; }],
   ['changed provenance', (r) => { r.provenance = 'live'; }],
   ['completion claim', (r) => { r.complete = true; }],
   ['failed report', (r) => { r.passed = false; }],
@@ -159,13 +159,13 @@ test('dry-run preparation must come from the CLI for this exact request and cand
 test('the native job carries the exact signed registry bytes and no signing material', () => {
   const raw = '{\n  "valid_until": 9223372036854775807\n}';
   const text = nativeJobText({ candidate: { signed_registry_snapshot: new RawJson(raw) }, run_nonce: H('1') },
-    Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]).toString('base64'), { protocol_version: 29, sequence: 1000,
+    Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]).toString('base64'), { protocol_version: 30, sequence: 1000,
       timestamp: '18446744073709551615', base_reserve: 5000000, min_temp_entry_ttl: 16, min_persistent_entry_ttl: 4096, max_entry_ttl: 631200 });
   assert.ok(text.includes(raw));
   assert.ok(text.includes('"timestamp":"18446744073709551615"'));
   assert.deepEqual(Object.keys(JSON.parse(text)), ['schema', 'request', 'account_wasm_base64', 'ledger']);
-  for (const ledger of [{ protocol_version: 30 }, { timestamp: 1 }, { extra: 1 }]) {
-    assert.throws(() => nativeJobText({}, 'AGFzbQEAAAA=', { protocol_version: 29, sequence: 1000, timestamp: '1',
+  for (const ledger of [{ protocol_version: 31 }, { timestamp: 1 }, { extra: 1 }]) {
+    assert.throws(() => nativeJobText({}, 'AGFzbQEAAAA=', { protocol_version: 30, sequence: 1000, timestamp: '1',
       base_reserve: 1, min_temp_entry_ttl: 1, min_persistent_entry_ttl: 1, max_entry_ttl: 1, ...ledger }), /refused/);
   }
 });

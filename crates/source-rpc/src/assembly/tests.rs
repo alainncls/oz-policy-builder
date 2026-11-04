@@ -267,7 +267,7 @@ fn source_account_identity_and_network_are_checked() {
                 responses[1].1["entries"][0]["key"] = b64(&wrong).into();
             }
             3 => responses[1].1["entries"][0]["lastModifiedLedgerSeq"] = 101.into(),
-            _ => responses[0].1["protocolVersion"] = 30.into(),
+            _ => responses[0].1["protocolVersion"] = (crate::MAX_SUPPORTED_PROTOCOL + 1).into(),
         }
         drop(responses);
         let error = assemble_install_transaction(&rpc, NETWORK, &request)

@@ -6,9 +6,9 @@ import { deploymentFixture } from './actions-fixture.mjs';
 import { CASE_IDS, RECIPIENT, captureFixture, capturedFrames, capturedSignRequest } from './captured-execution-fixture.mjs';
 import { nativeFixture, signRequest } from './native-execution-fixture.mjs';
 
-export const LEDGER = { protocol_version: 29, sequence: 1000, timestamp: '1760000000', base_reserve: 5000000,
+export const LEDGER = { protocol_version: 30, sequence: 1000, timestamp: '1760000000', base_reserve: 5000000,
   min_temp_entry_ttl: 720, min_persistent_entry_ttl: 120960, max_entry_ttl: 3110400 };
-export const CAPTURE_LEDGER = 5294840;
+export const CAPTURE_LEDGER = 5553674;
 const clone = (value) => structuredClone(value);
 const transfer = () => ({ fn: 'transfer', args: [
   { i: 0, c: { eq_address: { value: 'SELF' } }, prov: 'observed_exact' },

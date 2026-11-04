@@ -55,7 +55,7 @@ for (const kind of ['blend_claim', 'soroswap_swap']) test(`real CLI and worker a
       OZPB_REGISTRY_MIN_VERSION: '4', OZPB_RPC_SOURCES_FILE: sources }, {
       loadKey: () => delegate,
       nativeSource: async () => ({ accountWasmBase64: accountWasm.toString('base64'),
-        ledger: { protocol_version: 29, sequence: capture.record.bundle.ledger, timestamp: '1793000000',
+        ledger: { protocol_version: 30, sequence: capture.record.bundle.ledger, timestamp: '1793000000',
           base_reserve: 5000000, min_temp_entry_ttl: 16, min_persistent_entry_ttl: 4096, max_entry_ttl: 631200 } }),
     });
     assert.equal(summary.reports.length, spec.rules.length);

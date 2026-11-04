@@ -2,8 +2,8 @@
 
 Generated policies and the contracts test workspace pin **soroban-sdk 28.0.0** and
 **stellar-accounts 0.8.0**. This is the SDK major required by the published OpenZeppelin
-0.8.0 release. The execution runtime separately pins SDK/host 29.0.1 because its source
-snapshots and admission checks target protocol 29. The root CLI/MCP graph has no Soroban host.
+0.8.0 release. The execution runtime separately pins SDK 30.0.0-rc.1 and stable host 30.0.0 because its source
+snapshots and admission checks target protocol 30. The root CLI/MCP graph has no Soroban host.
 
 These are distinct compatibility boundaries:
 
@@ -12,7 +12,7 @@ These are distinct compatibility boundaries:
 | Newly generated policy source and Wasm | SDK 28.0.0, accounts policy library 0.8.0 | Policy `enforce`, `install`, `uninstall`, signer and context-rule wire types |
 | Native contracts differential tests | SDK 28.0.0, accounts library 0.8.0 | Current native account-library implementation; delegated authentication is mocked in the generated-suite fixtures |
 | Recognized deployed account and verifier Wasm | OpenZeppelin 0.7.2, existing exact code hashes | Existing storage reader, method inventory, wallet signing and authorization protocol |
-| Isolated native execution | SDK/host 29.0.1 | Runs actual account and generated-policy Wasm under protocol 29 |
+| Isolated native execution | SDK 30.0.0-rc.1 / host 30.0.0 | Runs actual account and generated-policy Wasm under protocol 30 |
 
 The policy interface is not the account signing protocol. OpenZeppelin 0.8.0 changes
 account authentication: external signatures bind the account-address-bearing
@@ -44,6 +44,35 @@ source/tests, native execution runtime, dependency locks/manifests or recorded g
 scheduled/dispatch checks remain a backstop, not their only execution opportunity. A dependency change also requires reviewing changed
 policy, helper and target fixture Wasm hashes, byte reproducibility, and fresh testnet evidence
 at the delivered revision. Passing ordinary PR CI alone is insufficient for release.
+
+## Protocol 30 compatibility
+
+The CLI/MCP decoder uses stable stellar-xdr 30.0.0. It accepts acquisition protocols through
+30 and refuses future protocols; the acquisition protocol is the endpoint's current protocol,
+not an assertion of a historical transaction's execution protocol. The execution/capture worker
+accepts only source protocol 30. Protocol-29 captures and jobs remain historical evidence and
+are not relabelled for host 30; record fresh captures for current execution.
+
+CAP-88 headers carry millisecond extensions. Both Rust and wallet SDKs decode them while
+preserving whole-second close-time semantics; advancing ledgers need not advance whole seconds.
+Muxed contract addresses (`W…`, CAP-84) remain unsupported: recording refuses them and exact
+plain-address constraints do not normalize them into an allowed address.
+
+The worker's release-candidate SDK is off-chain only. The generated policy/helper SDK 28.0.0,
+OpenZeppelin pins, CLI 27.0.0 build pin and recognized account/verifier Wasm are unchanged.
+Move the worker to stable SDK 30 when available and repeat its compatibility gates. Current
+contracts continue to run on protocol 30; the host migration does not upgrade installed code.
+The wallet backend/harness use JavaScript SDK 17.4.0; the applied Pollywallet root is pinned
+with its lockfile to SDK 16.4.1, which also decodes protocol-30 headers.
+
+Recording decoder identity is checked. Older RPC recordings made by the XDR-28 build require
+fresh acquisition while RPC retains the transaction, or an explicit self-supplied raw-XDR
+import. Do not change decoder metadata to make an old acquisition appear current. Reacquisition
+can change recording/spec hashes; it does not by itself change generated Wasm permissions.
+
+Sources: [SDF Bell upgrade guide](https://stellar.org/blog/developers/bell-protocol-30-upgrade-guide),
+[SDK 30 release candidate](https://github.com/stellar/rs-soroban-sdk/releases/tag/v30.0.0-rc.1),
+[CAP-88](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0088.md).
 
 ## Live-helper rollout
 

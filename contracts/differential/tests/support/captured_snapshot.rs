@@ -103,10 +103,8 @@ pub fn reconstruct(
     for (encoded, captured) in &capture.entries {
         let sdk_key = sdk_xdr::LedgerKey::from_xdr_base64(encoded, sdk_xdr::Limits::none())
             .expect("captured key is SDK-readable");
-        let data_xdr = captured
-            .data
-            .to_xdr_base64(stellar_xdr::Limits::none())
-            .unwrap();
+        let data_xdr =
+            xdr30::WriteXdr::to_xdr_base64(&captured.data, xdr30::Limits::none()).unwrap();
         let sdk_data =
             sdk_xdr::LedgerEntryData::from_xdr_base64(&data_xdr, sdk_xdr::Limits::none())
                 .expect("captured data is SDK-readable");

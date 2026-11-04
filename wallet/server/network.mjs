@@ -341,7 +341,7 @@ export class WalletNetwork {
   }
   /**
    * Source-ledger provenance and archival limits for the local native worker, read from the
-   * operator RPC in one bounded window. Only protocol 29 is supported; nothing is written.
+   * operator RPC in one bounded window. Only protocol 30 is supported; nothing is written.
    */
   async nativeSource(wasmHash) {
     try {
@@ -349,7 +349,7 @@ export class WalletNetwork {
       const latest = await this.#server.getLatestLedger();
       const header = latest.headerXdr;
       const sequence = ledger(latest.sequence);
-      if (network.protocolVersion !== 29 || Number(latest.protocolVersion) !== 29 || header?.ledgerVersion !== 29
+      if (network.protocolVersion !== 30 || Number(latest.protocolVersion) !== 30 || header?.ledgerVersion !== 30
         || header.ledgerSeq !== sequence || digest(bytes(header)) !== latest.id
         || !Number.isSafeInteger(header.baseReserve) || header.baseReserve < 1 || typeof header.scpValue.closeTime !== 'bigint') refuse();
       const key = xdr.LedgerKey.configSetting(new xdr.LedgerKeyConfigSetting({
@@ -365,7 +365,7 @@ export class WalletNetwork {
         || limits.some((value) => !Number.isSafeInteger(value) || value < 1 || value > 0xffffffff)
         || settings.minTemporaryTtl > settings.maxEntryTtl || settings.minPersistentTtl > settings.maxEntryTtl
         || [configLedger, codeLedger].some((observed) => observed < sequence || observed - sequence > 12)) refuse();
-      return { ledger: { protocol_version: 29, sequence, timestamp: header.scpValue.closeTime.toString(),
+      return { ledger: { protocol_version: 30, sequence, timestamp: header.scpValue.closeTime.toString(),
         base_reserve: header.baseReserve, min_temp_entry_ttl: settings.minTemporaryTtl,
         min_persistent_entry_ttl: settings.minPersistentTtl, max_entry_ttl: settings.maxEntryTtl },
       accountWasmBase64: code.toString('base64') };

@@ -105,7 +105,8 @@ const MAX_LEDGER_ENTRY_KEYS: usize = 200;
 ///
 /// Usually that protocol is the crate's major version, but not always. Protocol 29 changed no
 /// XDR: stellar-core v29.0.0 builds against the same `stellar/stellar-xdr` commit as v28.0.x,
-/// which is the commit `stellar-xdr` 28 compiles, so this build decodes protocol 29 as it is.
+/// so the previous decoder could accept protocol 29 without an XDR bump. Protocol 30 changes
+/// ledger headers and addresses; this build therefore uses its stable XDR 30 definitions.
 ///
 /// There is no historical-protocol floor (zero is invalid). `getNetwork` reports the protocol the endpoint is on now,
 /// which bounds what it can newly produce; it says nothing about the protocol of an old
@@ -2237,6 +2238,7 @@ mod tests {
         (28, "9c9c145953e80990d6ff1ae3a6a973a0ce6d0694"),
         // stellar-core v29.0.0: the same commit. Protocol 29 changed no XDR.
         (29, "9c9c145953e80990d6ff1ae3a6a973a0ce6d0694"),
+        (30, "4f524bbac80c781c06e4fb5fc93a2d0d331d6705"),
     ];
 
     /// The protocol ceiling is not a number somebody chose: it is the newest protocol whose XDR

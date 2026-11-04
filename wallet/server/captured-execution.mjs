@@ -9,7 +9,7 @@ import { runNative } from './native-process.mjs';
 import { RawJson, requestText } from './raw-json.mjs';
 
 const HASH = /^[0-9a-f]{64}$/;
-const HOST = 'soroban-env-host/29.0.1';
+const HOST = 'soroban-env-host/30.0.0';
 const SAC = Asset.native().contractId(Networks.TESTNET);
 const I64_MAX = 9223372036854775807n;
 /** Fixed by the worker: the original call, the adjacent amount and the unsigned call, in this order. */
@@ -166,7 +166,7 @@ export const checkTargetCapture = guarded((capture, { call, accountAddress, reci
   const history = decode(capture.header_xdr, xdr.LedgerHeaderHistoryEntry);
   const header = history.header;
   if (createHash('sha256').update(header.toXDR()).digest('hex') !== Buffer.from(history.hash.value).toString('hex')
-    || header.ledgerSeq !== observed || header.ledgerVersion !== 29 || !u32(header.baseReserve) || header.baseReserve < 1
+    || header.ledgerSeq !== observed || header.ledgerVersion !== 30 || !u32(header.baseReserve) || header.baseReserve < 1
     || typeof header.scpValue.closeTime !== 'bigint' || header.scpValue.closeTime > 0xffffffffffffffffn) refuse();
   const archival = capture.state_archival;
   exact(archival, ENTRY);
@@ -196,7 +196,7 @@ export const checkTargetCapture = guarded((capture, { call, accountAddress, reci
       || (contract ? !u32(entry.live_until_ledger) || entry.live_until_ledger <= observed : entry.live_until_ledger !== null)) refuse();
   }
   return freezeCopy({ capture, captureHash: captureHash(capture), observedLedger: observed, keys,
-    ledger: { protocol_version: 29, sequence: observed, timestamp: header.scpValue.closeTime.toString(),
+    ledger: { protocol_version: 30, sequence: observed, timestamp: header.scpValue.closeTime.toString(),
       base_reserve: header.baseReserve, min_temp_entry_ttl: settings.minTemporaryTtl,
       min_persistent_entry_ttl: settings.minPersistentTtl, max_entry_ttl: settings.maxEntryTtl } });
 });

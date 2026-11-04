@@ -48,7 +48,7 @@ cp "$work/pinned-account.wasm" "$work/testnet/pinned-account.wasm"
 ( cd wallet && node --input-type=module -e '
 import { readFileSync, writeFileSync } from "node:fs";
 import { Address, xdr } from "@stellar/stellar-sdk";
-const sim = JSON.parse(readFileSync("../crates/source-rpc/tests/captured-testnet/target-capture/simulateTransaction.json", "utf8"));
+const sim = JSON.parse(readFileSync("../crates/source-rpc/tests/captured-testnet/target-capture-protocol30/simulateTransaction.json", "utf8"));
 const call = xdr.SorobanAuthorizationEntry.fromXDR(sim.results[0].auth[0], "base64").rootInvocation.function.contractFn;
 const [account, recipient] = call.args.slice(0, 2).map((arg) => Address.fromScAddress(arg.address).toString());
 if (call.args[2].i128.hi !== 0n) throw new Error("unexpected recorded amount");

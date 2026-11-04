@@ -44,12 +44,12 @@ call remaining, a two-context authorization first spends that call, then refuses
 context; both counter and nonce writes must roll back before a final single call succeeds.
 This establishes local account authorization behavior, not the target's effects or network fees.
 
-The runtime pins SDK 29.0.1 and its host 29.0.1 in its own lockfile, and rejects source protocol
-versions other than 29. Generated policies use SDK 28.0.0 and the stellar-accounts 0.8.0 policy interface.
+The runtime pins SDK 30.0.0-rc.1 and stable host 30.0.0 in its own lockfile, and rejects source
+protocol versions other than 30. Generated policies use SDK 28.0.0 and the stellar-accounts 0.8.0 policy interface.
 The recognized account Wasm remains the separately pinned 0.7.2 implementation.
 See [dependency migration](SOROBAN-DEPENDENCIES.md) for the compatibility boundary.
 Only canonical XDR crosses this boundary. A shared [ABI vector](examples/native-runtime-abi.json)
-is checked against both the actual SDK-28 policy/account-library types and the runtime's SDK-29 wire
+is checked against both the actual SDK-28 policy/account-library types and the runtime's SDK-30 wire
 types; the source-built Wasm test additionally exercises the real account ABI.
 
 ## Machine protocol
@@ -66,7 +66,7 @@ The first UTF-8 NDJSON line is a `NativeJob` of at most 16 MiB:
 { schema: 1,
   request: DryRunInput,
   account_wasm_base64: string,
-  ledger: { protocol_version: 29, sequence: u32, timestamp: decimal-u64-string,
+  ledger: { protocol_version: 30, sequence: u32, timestamp: decimal-u64-string,
             base_reserve: u32, min_temp_entry_ttl: u32,
             min_persistent_entry_ttl: u32, max_entry_ttl: u32 } }
 ```
@@ -222,7 +222,7 @@ ozpb dry-run --request dry-run-request.json \
   preimage and digest are rebuilt and compared byte for byte. The first refusal ends the run.
   The signer allows only the case IDs a correct run asks to sign, and the report is accepted
   only if it answered exactly those.
-- **Ledger and account.** `--source-ledger` supplies the job's protocol-29 ledger parameters
+- **Ledger and account.** `--source-ledger` supplies the job's protocol-30 ledger parameters
   (provenance only for this layer); `--account-wasm` must hash to the pinned account Wasm.
 - **Exit status.** Zero only when the report's `acceptance.meets_minimum` holds; any other report
   is still printed. A refused key file prints no report. A requested capture that does not

@@ -84,7 +84,7 @@ export async function monitorInstallation({ network, toolchain, record, owner, c
       // This wallet supports the native SAC only: its executable is a host builtin, with no
       // Wasm hash to invent. The canonical native address and protocol are its code identity.
       if (identity.context_contract !== SAC || value.address !== SAC || value.executable !== 'stellar_asset'
-        || value.protocolVersion !== 29) reasons.push('target_identity_changed');
+        || value.protocolVersion !== 30) reasons.push('target_identity_changed');
     } else if (index === 3) {
       if (value.value?.toXDR('base64') !== owner.ownerRuleXdr) reasons.push('owner_rule_changed');
     } else if (index === 4) {
@@ -105,6 +105,6 @@ export async function monitorInstallation({ network, toolchain, record, owner, c
     recordedRuleHash: createHash('sha256').update(record.ruleXdr).digest('hex'), expectedAuthorityCommitment: record.authorityCommitment, projectedAuthorityCommitment: projectedCommitment,
     actualAccountStateDigest: authority?.actual_account_state_digest ?? null,
     actualRawEntryDigest: authority?.actual_raw_entry_digest ?? null,
-    scope: 'exact_recorded_grant_and_modeled_authority; native_SAC_builtin_protocol_29; no_background_monitor_or_safety_verdict',
+    scope: 'exact_recorded_grant_and_modeled_authority; native_SAC_builtin_protocol_30; no_background_monitor_or_safety_verdict',
     signaturesRequested: false, submitted: false });
 }

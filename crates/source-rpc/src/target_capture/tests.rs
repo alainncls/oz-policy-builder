@@ -21,7 +21,7 @@ impl RpcTransport for Fixture {
     fn call(&self, method: &str, params: Value) -> Result<Value, RpcError> {
         self.calls.borrow_mut().push(method.into());
         Ok(match method {
-            "getNetwork" => json!({"passphrase": NETWORK, "protocolVersion": 29}),
+            "getNetwork" => json!({"passphrase": NETWORK, "protocolVersion": 30}),
             "simulateTransaction" => {
                 assert_eq!(params["authMode"], "record");
                 assert_eq!(params["transaction"], self.envelope);
@@ -190,7 +190,7 @@ fn fixture() -> Fixture {
         },
     };
     let mut header = LedgerHeader {
-        ledger_version: 29,
+        ledger_version: 30,
         ledger_seq: LEDGER,
         base_reserve: 5_000_000,
         ..Default::default()
@@ -550,7 +550,7 @@ fn native_target_capture_withholds_endpoint_text() {
     let secret = fixture.envelope.clone();
     type Fault = fn(&str) -> Result<Value, RpcError>;
     let echo: Fault = |s| Err(RpcError::Rpc(s.into()));
-    let named: Fault = |s| Ok(json!({"passphrase": s, "protocolVersion": 29}));
+    let named: Fault = |s| Ok(json!({"passphrase": s, "protocolVersion": 30}));
     let gateway: Fault = |s| {
         Err(RpcError::Transport(format!(
             "HTTP 500 from the endpoint: {s}"

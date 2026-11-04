@@ -164,7 +164,8 @@ fn captured_wasm_runs_for_selected_key_and_refuses_uncaptured_read() {
     for (encoded, captured) in &capture.entries {
         let sdk_key =
             sdk_xdr::LedgerKey::from_xdr_base64(encoded, sdk_xdr::Limits::none()).unwrap();
-        let data_xdr = captured.data.to_xdr_base64(limits()).unwrap();
+        let data_xdr =
+            xdr30::WriteXdr::to_xdr_base64(&captured.data, xdr30::Limits::none()).unwrap();
         let sdk_data =
             sdk_xdr::LedgerEntryData::from_xdr_base64(&data_xdr, sdk_xdr::Limits::none()).unwrap();
         assert_eq!(sdk_data.to_key(), sdk_key);

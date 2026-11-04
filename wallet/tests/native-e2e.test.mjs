@@ -20,7 +20,7 @@ const FILES = ['Cargo.toml', 'rust-toolchain.toml', 'rustfmt.toml', 'src/lib.rs'
 const POLICY = 'CAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAUCQKBIFAUCRUA6';
 // The runtime process test's public delegate seed; it is synthetic test material, never a wallet key.
 const delegate = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 42));
-const LEDGER = { protocol_version: 29, sequence: 1000, timestamp: '100000', base_reserve: 5000000,
+const LEDGER = { protocol_version: 30, sequence: 1000, timestamp: '100000', base_reserve: 5000000,
   min_temp_entry_ttl: 16, min_persistent_entry_ttl: 4096, max_entry_ttl: 631200 };
 
 async function prepared({ candidateContextRuleId = 3 } = {}) {

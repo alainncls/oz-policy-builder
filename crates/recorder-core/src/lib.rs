@@ -23,9 +23,9 @@ use stellar_xdr::{
 };
 
 pub const RECORDING_SCHEMA: &str = "recording/v2";
-/// Highest acquisition protocol supported by the pinned XDR decoder. Protocol 29
-/// uses the same XDR revision as protocol 28; the RPC compatibility test pins that claim.
-pub const MAX_ACQUISITION_PROTOCOL: u32 = 29;
+/// Highest acquisition protocol supported by the pinned XDR decoder. Protocol 30
+/// adds ledger-header and address variants; the RPC compatibility test pins its XDR revision.
+pub const MAX_ACQUISITION_PROTOCOL: u32 = 30;
 // Soroban transactions and ledger entries are far smaller than this in practice. Keep a
 // defensive per-value bound, then separately cap the total encoded evidence below the canonical
 // hash preimage ceiling. This makes every accepted recording hashable instead of discovering an
@@ -2043,6 +2043,40 @@ mod tests {
         FeeBumpTransactionInnerTx, MuxedAccount, Operation, SorobanAddressCredentials,
         SorobanTransactionMetaExt, TransactionV1Envelope, Uint256,
     };
+
+    #[test]
+    fn protocol30_muxed_contract_arguments_are_refused_without_address_normalization() {
+        let muxed = ScVal::Address(ScAddress::MuxedContract(stellar_xdr::MuxedContract {
+            id: 7,
+            contract_id: stellar_xdr::ContractId(stellar_xdr::Hash([1; 32])),
+        }));
+        let mut snapshot = executed_snapshot();
+        let mut envelope =
+            TransactionEnvelope::from_xdr_base64(&snapshot.envelope_xdr_base64, Limits::none())
+                .unwrap();
+        let TransactionEnvelope::Tx(ref mut tx) = envelope else {
+            panic!("v1 fixture")
+        };
+        for operation in tx.tx.operations.iter_mut() {
+            if let OperationBody::InvokeHostFunction(invoke) = &mut operation.body {
+                for auth in invoke.auth.iter_mut() {
+                    if let SorobanAuthorizedFunction::ContractFn(call) =
+                        &mut auth.root_invocation.function
+                    {
+                        let mut args = call.args.to_vec();
+                        assert!(!args.is_empty(), "recorded authorization has arguments");
+                        args[0] = muxed.clone();
+                        call.args = args.try_into().unwrap();
+                    }
+                }
+            }
+        }
+        snapshot.envelope_xdr_base64 = envelope.to_xdr_base64(Limits::none()).unwrap();
+        assert!(matches!(
+            record(&snapshot, RecordOptions::default()),
+            Err(RecordError::UnsupportedAddress(_))
+        ));
+    }
 
     #[test]
     fn executed_transfer_records_authorization_and_movement() {
