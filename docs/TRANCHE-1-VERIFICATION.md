@@ -71,8 +71,8 @@ This single gate covers both Cargo workspaces and the excluded generated policy 
 checks dependency boundaries, publication invariants, formatting, warnings, tests, the
 reference-evaluator differential suite, deterministic code generation, clean-build Wasm
 reproducibility, real-builder reconciliation, licences, advisories, sources, and unused
-dependencies. `--offline` is an explicitly reduced developer check and is not sufficient for
-acceptance.
+dependencies, and fails if the run itself changed any tracked file. `--offline` is an explicitly
+reduced developer check and is not sufficient for acceptance.
 
 ## 2. Reproduce the live Tranche 1 outcome
 
