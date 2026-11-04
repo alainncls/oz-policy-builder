@@ -70,6 +70,9 @@ fresh acquisition while RPC retains the transaction, or an explicit self-supplie
 import. Do not change decoder metadata to make an old acquisition appear current. Reacquisition
 can change recording/spec hashes; it does not by itself change generated Wasm permissions.
 
+[Protocol 30 validation](PROTOCOL-30-VALIDATION.md) records the automated gates and fresh
+testnet observations separately from the historical Protocol-29 evidence.
+
 Sources: [SDF Bell upgrade guide](https://stellar.org/blog/developers/bell-protocol-30-upgrade-guide),
 [SDK 30 release candidate](https://github.com/stellar/rs-soroban-sdk/releases/tag/v30.0.0-rc.1),
 [CAP-88](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0088.md).

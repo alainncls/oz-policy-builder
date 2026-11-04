@@ -1,0 +1,52 @@
+{
+  "evidence_kind": "local_cli_capture_record",
+  "network": "testnet",
+  "protocol": 30,
+  "implementation_revision": "bfd6b8450138a556a994f3b3ea458b0b8310b80e",
+  "cli_binary_sha256": "82178d283babfb2b450a3f01719bc9eb5c026b790c063df5706cfb1d093f0bb1",
+  "layers": [
+    {
+      "layer": "reference",
+      "status": "passed"
+    },
+    {
+      "layer": "account_wasm",
+      "status": "passed",
+      "source_ledger": 5554235
+    },
+    {
+      "layer": "captured_target",
+      "status": "passed",
+      "source_ledger": 5554291
+    },
+    {
+      "layer": "live_enforcement",
+      "status": "unavailable"
+    }
+  ],
+  "acceptance": {
+    "required_reverted_denials": 5,
+    "original_permitted": true,
+    "executed_layers": [
+      {
+        "layer": "account_wasm",
+        "status": "passed",
+        "original_permitted": true,
+        "reverted_denials": 24
+      },
+      {
+        "layer": "captured_target",
+        "status": "passed",
+        "original_permitted": true,
+        "reverted_denials": 2
+      }
+    ],
+    "meets_minimum": true
+  },
+  "complete": false,
+  "limitations": [
+    "Fresh RPC-reported capture, executed locally with the actual worker and a synthetic offline-domain delegate.",
+    "No live signature, submission, owner authority or live-enforcement result is claimed.",
+    "Editable local summary; executable hash identifies bytes, not a reproducible source-to-binary attestation."
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "evidence_kind": "local_wallet_automation_record",
+  "network": "testnet",
+  "protocol": 30,
+  "implementation_revision": "bfd6b8450138a556a994f3b3ea458b0b8310b80e",
+  "started_at": "2026-11-04T12:15:13.570Z",
+  "finished_at": "2026-11-04T12:20:11.712Z",
+  "automation": true,
+  "authenticator": "chrome_devtools_virtual_authenticator",
+  "human_approval_attested": false,
+  "result": "completed",
+  "public": {
+    "account": "CBXQZYFHH4O3RTQSXRWKLM6F7WLIWNJXN6JEA2DGOKPX5U3EVA4TTTYF",
+    "verifier": "CDF2DEOJCZDCJIQVGSBIVCDKMSOC52CIQYQR3UJHVQBKKEP6DPJHIY4N",
+    "sample_transaction": "fad811f0cb0e77603f9ead7822a53a6437fd3d642a786316857087f345fa61ad"
+  },
+  "layers": [
+    {
+      "layer": "reference",
+      "status": "passed"
+    },
+    {
+      "layer": "account_wasm",
+      "status": "passed"
+    },
+    {
+      "layer": "captured_target",
+      "status": "passed"
+    },
+    {
+      "layer": "live_enforcement",
+      "status": "passed"
+    }
+  ],
+  "acceptance": {
+    "requiredRevertedDenials": 5,
+    "originalPermitted": true,
+    "executedLayers": [
+      {
+        "layer": "account_wasm",
+        "status": "passed",
+        "originalPermitted": true,
+        "revertedDenials": 24
+      },
+      {
+        "layer": "captured_target",
+        "status": "passed",
+        "originalPermitted": true,
+        "revertedDenials": 2
+      }
+    ],
+    "meetsMinimum": true
+  },
+  "complete": true,
+  "replay": {
+    "status": "unchanged",
+    "latestLedger": 5554230,
+    "signaturesValidUntil": 5554229
+  },
+  "installation": {
+    "tx": "9250f1ba95d7caae907aaed9952489b4c3c2a9b5b2d607f4292373b94c3ba4d9",
+    "ruleId": 1
+  },
+  "monitor_status": "unchanged",
+  "removal": {
+    "status": "removed",
+    "ruleReadback": "absent",
+    "policyCleanup": "not_installed",
+    "tx": "64726b8d03c51cdff26968aaf2860be74c00c354738473d6ffa98dc6674915b1"
+  },
+  "limitations": [
+    "Editable local observations, not authenticated ledger proofs or milestone acceptance.",
+    "Virtual passkey automation does not attest a human permission review, confirmation or hardware passkey.",
+    "The live layer uses enforcing simulations with authorizations; the replay check was performed after their expiry."
+  ]
+}
