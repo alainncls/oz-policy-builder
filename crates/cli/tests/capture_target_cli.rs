@@ -87,7 +87,6 @@ fn capture_target_replays_recorded_testnet_fixture() {
         [
             "getNetwork",
             "simulateTransaction",
-            "getNetwork",
             "getLedgerEntries",
             "getLedgers"
         ]

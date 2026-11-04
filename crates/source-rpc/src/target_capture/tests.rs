@@ -232,6 +232,17 @@ fn native_target_capture_binds_recorded_call_header_config_and_exact_entries() {
         capture.account_code_hash,
         sha256(b"\0asm\x01\0\0\0").to_hex()
     );
+    // The network is checked once, before the simulation: nothing is requested between the
+    // simulation and the entry read but the read.
+    assert_eq!(
+        *fixture.calls.borrow(),
+        [
+            "getNetwork",
+            "simulateTransaction",
+            "getLedgerEntries",
+            "getLedgers"
+        ]
+    );
 }
 #[test]
 fn native_target_capture_refuses_incoherence_archive_and_unrelated_recording() {
@@ -568,8 +579,6 @@ fn native_target_capture_withholds_endpoint_text() {
         ("simulateTransaction", 0, echo, false),
         ("simulateTransaction", 0, gateway, false),
         ("simulateTransaction", 0, foreign_id, false),
-        ("getNetwork", 1, echo, false),
-        ("getNetwork", 1, named, true),
         ("getLedgerEntries", 0, echo, false),
         ("getLedgers", 0, echo, false),
         ("getLedgers", 0, gateway, false),
