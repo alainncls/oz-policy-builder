@@ -156,3 +156,8 @@ b23c676a68f67687d5ffc8419d3992625fc42561c791f52380d3113864715071|testnet-tx|owne
 8471e2feea4ecf3e355d6bc14b21274dfd1bb7bd89ee3a42a6cf2e7e5263c1f5|testnet-tx|delegated swap at ledger 5505544, November 1 Soroswap run
 6d6ec0ea62c65d3d7ae6ab7ec491e80868256bd846f34f1cda6792124b4e4209|testnet-tx|owner-authorized transfer-rule (ID 2) removal at ledger 5505707
 e16cd26da8b385f20a56df6aac0978fc80c16b31a473fca8cd8771708a27b933|testnet-tx|owner-authorized router-rule (ID 1) removal at ledger 5505708
+
+# Helper TTL extensions on 3 November 2026 in docs/ATOMIC-LIVE-HELPER.md ("Keeping the helper live");
+# public testnet outcomes, read back SUCCESS from testnet RPC, not derivable by the offline gate.
+14bdcc3afa12419e65b6d22b809dce8895057546632b19fd3c7155f912d4b7a3|testnet-tx|helper instance TTL extension to ledger 6055154, at ledger 5536754
+64ab7170d827e1f0af12b374ec8a0b1df255e022fe5de9bdeaa45b6486724aed|testnet-tx|helper code TTL extension to ledger 6055156, at ledger 5536756

@@ -266,8 +266,9 @@ The [28 October 2026 receipt](evidence/atomic-live-helper-testnet-2026-10-28.jso
 current helper at `CBFSOXRVL4KTZJD6JAIBB7EHRQKOFYKMXQX6YMCLONAS45RQ77MKNOOA`, read back at
 ledger 5435087 with the current `EXPECTED_HELPER_HASH` / wallet helper pin. Configure new
 wallet live checks with that address, subject to their fresh code/liveness checks. Its instance
-was live until ledger 5556046 and code until 5556045 when observed; these are observations,
-not a promise that the contract remains live.
+was live until ledger 5556046 and code until 5556045 when observed, before the extension
+[below](#keeping-the-helper-live); these are observations, not a promise that the contract
+remains live.
 
 The original 1,000,000-stroop simulation permitted and the adjacent amount was denied by the
 candidate policy's `NoTupleMatched` (6). After signature expiry at ledger 5435099, readback at
@@ -343,11 +344,18 @@ stellar contract extend --wasm-hash <EXPECTED_HELPER_HASH> \
   --ledgers-to-extend <ledgers> --source-account <funded testnet key> --network testnet
 ```
 
-The first extends the instance, the second the code, whose hash is `EXPECTED_HELPER_HASH`; they
-have not been run against this deployment. An entry that is already archived would have to be restored first
-(`stellar contract restore`), which has not been tried either; deploying again
-([above](#redeploying-after-a-testnet-reset)) is the tested path. Either way, update the
-operator's `liveHelper` if the contract ID changes.
+The first extends the instance, the second the code, whose hash is `EXPECTED_HELPER_HASH`. On
+3 November 2026 both ran against the current helper
+`CBFSOXRVL4KTZJD6JAIBB7EHRQKOFYKMXQX6YMCLONAS45RQ77MKNOOA`, with `--ledgers-to-extend 518400`
+and `--network testnet`, from a funded testnet key; testnet was on protocol 29. Transaction
+`14bdcc3afa12419e65b6d22b809dce8895057546632b19fd3c7155f912d4b7a3`, at ledger 5536754, moved the
+instance from live until ledger 5556046 to 6055154; transaction
+`64ab7170d827e1f0af12b374ec8a0b1df255e022fe5de9bdeaa45b6486724aed`, at ledger 5536756, moved the
+code from 5556045 to 6055156. That is about 30 days of testnet ledgers, and the values are what
+the transactions wrote, not a promise that the entries stay live. An entry that is already
+archived would have to be restored first (`stellar contract restore`), which has not been tried;
+deploying again ([above](#redeploying-after-a-testnet-reset)) is the tested path. Either way,
+update the operator's `liveHelper` if the contract ID changes.
 
 ## Outstanding
 
