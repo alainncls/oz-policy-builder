@@ -24,9 +24,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use stellar_xdr::{Limits, ReadXdr, ScString, ScVal};
 
 /// The host the worker pins; a report naming another host is refused.
-pub const HOST_VERSION: &str = "soroban-env-host/29.0.1";
+pub const HOST_VERSION: &str = "soroban-env-host/30.0.0";
 /// The source protocol the worker accepts.
-pub const SOURCE_PROTOCOL_VERSION: u32 = 29;
+pub const SOURCE_PROTOCOL_VERSION: u32 = 30;
 /// The candidate's rule ID inside the worker's fresh local installation.
 pub const LOCAL_RULE_ID: u32 = 1;
 /// Delegate signatures expire this many ledgers after the case ledger.
@@ -364,7 +364,7 @@ pub fn check_source_ledger(ledger: &SourceLedger) -> Result<(), &'static str> {
         || ledger.min_temp_entry_ttl > ledger.max_entry_ttl
         || ledger.min_persistent_entry_ttl > ledger.max_entry_ttl
     {
-        return Err("source ledger is not a protocol-29 ledger with consistent TTL bounds");
+        return Err("source ledger is not a protocol-30 ledger with consistent TTL bounds");
     }
     Ok(())
 }

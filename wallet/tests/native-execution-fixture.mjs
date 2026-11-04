@@ -40,7 +40,7 @@ export function nativeFixture({ maxCalls = 2, accountAddress = vector.binding.ac
   });
   const result = { type: 'result', schema: 1, binding, execution_network_id: prepared.execution_network_id,
     account_code_hash: ACCOUNT_WASM, policy_address: policyAddress, policy_code_hash: policyCodeHash,
-    host_version: 'soroban-env-host/29.0.1', local_rule_id: 1, candidate_context_rule_id: candidateContextRuleId,
+    host_version: 'soroban-env-host/30.0.0', local_rule_id: 1, candidate_context_rule_id: candidateContextRuleId,
     provenance: 'fresh_local_candidate_boundary_states; counter seeds and ledgers are synthetic; no wallet ownership or live state claim',
     cases, controls: CONTROL_STAGES.map(([name, stage]) => ({ name, passed: true, refusal_stage: stage,
       state_before_hash: H('c'), state_after_hash: H('c') })),

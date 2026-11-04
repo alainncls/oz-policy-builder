@@ -708,7 +708,8 @@ pub struct PolicyAuthorityState {
 
 /// How the state was acquired. Not part of the approval commitment — ledger numbers, TTLs and
 /// endpoint metadata move without any change in authority — but every read was validated
-/// against it (one reported ledger, requested keys only, complete reconciliation).
+/// against it (one endpoint ledger: one response, or for more than 200 keys several reporting
+/// the same ledger; requested keys only; complete reconciliation).
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyAuthorityEvidence {

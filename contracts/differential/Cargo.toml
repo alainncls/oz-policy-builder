@@ -19,6 +19,7 @@ ozpb-evaluator = { path = "../../crates/evaluator" }
 ozpb-synthesizer = { path = "../../crates/synthesizer" }
 ozpb-codegen = { path = "../../crates/codegen" }
 stellar-strkey = "0.0.18"
+xdr30 = { package = "stellar-xdr", version = "30", default-features = false, features = ["std", "base64"] }
 stellar-xdr = { version = "28", default-features = false, features = ["std", "base64", "serde"] }
 ed25519-dalek = "2"
 sha2 = "0.10"

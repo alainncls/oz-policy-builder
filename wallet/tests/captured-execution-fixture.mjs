@@ -5,7 +5,7 @@ import { ACCOUNT_WASM, NETWORK_ID } from '../shared/approval.mjs';
 import { offlineDomain } from '../server/native-protocol.mjs';
 
 const vector = JSON.parse(readFileSync(new URL('../../docs/examples/native-domain-vector.json', import.meta.url)));
-const recordedDir = new URL('../../crates/source-rpc/tests/captured-testnet/target-capture/', import.meta.url);
+const recordedDir = new URL('../../crates/source-rpc/tests/captured-testnet/target-capture-protocol30/', import.meta.url);
 const recorded = (name) => JSON.parse(readFileSync(new URL(`${name}.json`, recordedDir), 'utf8'));
 const H = (n) => n.repeat(64);
 export const SAC = Asset.native().contractId(Networks.TESTNET);
@@ -44,7 +44,7 @@ export function capturedKeys({ account, recipient = RECIPIENT, delegate, policy 
  * responses: their SAC instance, archival configuration and header (re-sequenced and re-hashed),
  * with the sender balance and recipient account re-addressed. Internally consistent; not evidence.
  */
-export function captureFixture({ account, recipient = RECIPIENT, amount = 1000000n, observedLedger = 5294840 }) {
+export function captureFixture({ account, recipient = RECIPIENT, amount = 1000000n, observedLedger = 5553674 }) {
   const ledgers = recorded('getLedgers');
   const entries = recorded('getLedgerEntries').entries;
   const history = xdr.LedgerHeaderHistoryEntry.fromXDR(ledgers.ledgers[0].headerXdr, 'base64');
@@ -134,7 +134,7 @@ export function capturedFrames({ capture, captureHash, account, delegate, recipi
   const result = { type: 'result', schema: 1, layer: 'captured_target', binding, execution_network_id: executionNetworkId,
     capture_hash: captureHash, candidate_state_hash: H('c'), capture_provenance: 'rpc_reported', observed_ledger: observed,
     target_contract: SAC, account_code_hash: ACCOUNT_WASM, policy_address: policyAddress, policy_code_hash: policyCodeHash,
-    host_version: 'soroban-env-host/29.0.1', local_rule_id: 1, candidate_context_rule_id: candidateContextRuleId,
+    host_version: 'soroban-env-host/30.0.0', local_rule_id: 1, candidate_context_rule_id: candidateContextRuleId,
     storage_mode: 'strict_snapshot_source',
     provenance: 'rpc_reported target entries with outer LedgerEntry extension reconstructed as V0; fresh local candidate '
       + 'installation and synthetic counter seed; offline execution network; no owner authority, fee, reserve or live-network claim',

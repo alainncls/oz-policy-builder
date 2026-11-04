@@ -113,7 +113,7 @@ request = {
 }
 (work / "request.json").write_text(json.dumps(request))
 (work / "ledger.json").write_text(json.dumps({
-    "protocol_version": 29, "sequence": 1000, "timestamp": "100000", "base_reserve": 5000000,
+    "protocol_version": 30, "sequence": 1000, "timestamp": "100000", "base_reserve": 5000000,
     "min_temp_entry_ttl": 16, "min_persistent_entry_ttl": 4096, "max_entry_ttl": 631200}))
 
 def crc16(data):

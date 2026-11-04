@@ -1,4 +1,4 @@
-//! Shared captured-target fixture: a capture of a real SDK-29 native SAC deployment, sender
+//! Shared captured-target fixture: a capture of a real SDK-30 native SAC deployment, sender
 //! balance and existing recipient, shaped exactly as `capture_native_target` returns it.
 //! It is built locally, not observed over RPC.
 #![allow(dead_code)]
@@ -39,7 +39,7 @@ pub fn job_from(native_job_var: &str, sender_balance: i128) -> CapturedTargetJob
         capture_snapshot_at_drop: false,
     });
     env.ledger().with_mut(|l| {
-        l.protocol_version = 29;
+        l.protocol_version = 30;
         l.sequence_number = native.ledger.sequence;
         l.timestamp = 100_000;
         l.network_id = hex::decode(&native.request.candidate.network_id)
@@ -148,7 +148,7 @@ pub fn job_from(native_job_var: &str, sender_balance: i128) -> CapturedTargetJob
         live_until_ledger: None,
     };
     let mut header = xdr::LedgerHeader {
-        ledger_version: 29,
+        ledger_version: native.ledger.protocol_version,
         ledger_seq: native.ledger.sequence,
         base_reserve: 5_000_000,
         ..Default::default()

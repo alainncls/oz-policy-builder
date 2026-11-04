@@ -5,7 +5,10 @@
 //! enforcing it, so a successful simulation is never evidence that a policy permits the call.
 //! The footprint is then re-read in one bounded `getLedgerEntries` batch together with the
 //! network's state-archival configuration, and the exact ledger header comes from `getLedgers`.
-//! Every value is endpoint-reported (`rpc_reported`); none of it is an inclusion proof.
+//! Every value is endpoint-reported (`rpc_reported`); none of it is an inclusion proof. The
+//! network is checked once, before the simulation, so nothing is requested between the
+//! simulation and the entry read; a ledger can still close between them, and then the attempt
+//! is retried.
 //!
 //! The envelope is confidential input. A shape this capture does not take is refused locally
 //! under the same input errors as preflight, and nothing is sent. Once simulation has run the
@@ -15,7 +18,8 @@
 use crate::preflight::{local_envelope, restores_archived_entries, validate_restoration};
 use crate::{
     envelope_carries_signatures, read_invocation_footprint, verify_network, xdr_limits,
-    CapturedFootprintEntry, FootprintCaptureError, RpcError, RpcTransport, MAX_XDR_BASE64_BYTES,
+    CapturedFootprintEntry, FootprintCaptureError, OneNetworkCheck, RpcError, RpcTransport,
+    MAX_XDR_BASE64_BYTES,
 };
 use ozpb_domain::{sha256, NetworkId, TargetCapture, TargetEntry};
 use serde_json::{json, Value};
@@ -29,7 +33,7 @@ use stellar_xdr::{
 };
 
 /// The only source protocol whose captured state the execution runtime reproduces.
-const CAPTURE_PROTOCOL: u32 = 29;
+const CAPTURE_PROTOCOL: u32 = 30;
 /// Simulation and the entry read may observe different ledgers; retry once, then give up.
 const CAPTURE_ATTEMPTS: usize = 2;
 /// Bound on the captured entry payload carried into an execution job.
@@ -211,7 +215,9 @@ pub fn capture_native_target<T: RpcTransport>(
         config_setting_id: ConfigSettingId::StateArchival,
     });
     let encoded_config_key = encode(&config_key, "state-archival key")?;
-    let transport = Withheld(transport);
+    let withheld = Withheld(transport);
+    // The footprint reader's own network check is answered from this one.
+    let transport = OneNetworkCheck::new(&withheld);
     verify_network(&transport, network_passphrase).map_err(withhold)?;
     for _ in 0..CAPTURE_ATTEMPTS {
         let simulation = transport.call(

@@ -1,4 +1,4 @@
-//! Real protocol-29 execution of the SDK-28 helper, pinned account and generated policy.
+//! Real protocol-30 execution of the SDK-28 helper, pinned account and generated policy.
 //! Every authorization is signed with a distinct synthetic owner or delegate key.
 use ed25519_dalek::{Signer as _, SigningKey};
 use ozpb_domain::{pinned_upstream::OZ_SMART_ACCOUNT_WASM, sha256};
@@ -364,7 +364,7 @@ impl Fixture {
             capture_snapshot_at_drop: false,
         });
         env.ledger().with_mut(|l| {
-            l.protocol_version = 29;
+            l.protocol_version = 30;
             l.sequence_number = 1000;
             l.timestamp = 100_000;
             l.network_id = NETWORK;

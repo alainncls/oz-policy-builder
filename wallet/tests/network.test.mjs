@@ -78,7 +78,7 @@ function networkFixture(t, change = () => {}, options = {}) {
   const calls = [];
   let sent;
   const server = {
-    getNetwork: async () => ({ passphrase: Networks.TESTNET, protocolVersion: 29 }),
+    getNetwork: async () => ({ passphrase: Networks.TESTNET, protocolVersion: 30 }),
     getAccount: async (address) => new Account(address, '7'),
     simulateTransaction: async (tx, _resources, mode) => {
       calls.push({ mode, tx });
@@ -313,15 +313,15 @@ function nativeSourceServer(mode = 'valid') {
   const code = Buffer.from([0,97,115,109,1,0,0,0, mode === 'wrong code bytes' ? 1 : 0]);
   const wasmHash = Buffer.from(hash(Buffer.from([0,97,115,109,1,0,0,0,0]))).toString('hex');
   const zero = Buffer.alloc(32);
-  const header = new xdr.LedgerHeader({ ledgerVersion: mode === 'header protocol' ? 30 : 29, previousLedgerHash: zero,
+  const header = new xdr.LedgerHeader({ ledgerVersion: mode === 'header protocol' ? 31 : 30, previousLedgerHash: zero,
     scpValue: new xdr.StellarValue({ txSetHash: zero, closeTime: 18446744073709551615n, upgrades: [],
       ext: xdr.StellarValueExt.stellarValueBasic() }), txSetResultHash: zero, bucketListHash: zero,
     ledgerSeq: mode === 'header sequence' ? 999 : 1000, totalCoins: 0n, feePool: 0n, inflationSeq: 0, idPool: 0n,
     baseFee: 100, baseReserve: 5000000, maxTxSetSize: 100, skipList: [zero, zero, zero, zero], ext: xdr.LedgerHeaderExt.v0() });
   const id = mode === 'header hash' ? 'ab'.repeat(32) : Buffer.from(hash(header.toXDR())).toString('hex');
   const server = {
-    getNetwork: async () => ({ passphrase: Networks.TESTNET, protocolVersion: mode === 'network protocol' ? 30 : 29 }),
-    getLatestLedger: async () => ({ id, sequence: 1000, protocolVersion: 29, headerXdr: xdr.LedgerHeader.fromXDR(header.toXDR()) }),
+    getNetwork: async () => ({ passphrase: Networks.TESTNET, protocolVersion: mode === 'network protocol' ? 31 : 30 }),
+    getLatestLedger: async () => ({ id, sequence: 1000, protocolVersion: 30, headerXdr: xdr.LedgerHeader.fromXDR(header.toXDR()) }),
     getLedgerEntries: async (requested) => {
       const key = xdr.LedgerKey.fromXDR(requested.toXDR());
       if (requested.type === 'contractCode') {
@@ -342,11 +342,11 @@ function nativeSourceServer(mode = 'valid') {
   };
   return { server, wasmHash, code };
 }
-test('native source reads one coherent protocol-29 ledger, archival limits and exact account code', async (t) => {
+test('native source reads one coherent protocol-30 ledger, archival limits and exact account code', async (t) => {
   const { server, wasmHash, code } = nativeSourceServer();
   const { network } = networkFixture(t, (stub) => Object.assign(stub, server));
   assert.deepEqual(await network.nativeSource(wasmHash), {
-    ledger: { protocol_version: 29, sequence: 1000, timestamp: '18446744073709551615', base_reserve: 5000000,
+    ledger: { protocol_version: 30, sequence: 1000, timestamp: '18446744073709551615', base_reserve: 5000000,
       min_temp_entry_ttl: 720, min_persistent_entry_ttl: 120960, max_entry_ttl: 3110400 },
     accountWasmBase64: code.toString('base64') });
 });
@@ -372,7 +372,7 @@ test('the capture envelope is the fee payer\'s unsigned call: nothing is simulat
   assert.equal(op.hostFunction.invokeContract.toXDR('base64'), call.toXDR('base64'));
   assert.deepEqual(calls, []);
   assert.deepEqual(readdirSync(root), []);
-  const other = networkFixture(t, (server) => { server.getNetwork = async () => ({ passphrase: Networks.PUBLIC, protocolVersion: 29 }); });
+  const other = networkFixture(t, (server) => { server.getNetwork = async () => ({ passphrase: Networks.PUBLIC, protocolVersion: 30 }); });
   await assert.rejects(() => other.network.targetEnvelope(call), /refused/);
 });
 
@@ -471,13 +471,13 @@ test('target identity reports the canonical native SAC builtin without inventing
   const capture = captureFixture({ account: contract });
   const stored = capture.entries.map((item) => ({ ...item, key: xdr.LedgerKey.fromXDR(item.key_xdr, 'base64') }))
     .find((item) => item.key.type === 'contractData' && item.key.contractData.key.type === 'scvLedgerKeyContractInstance');
-  const server = { getNetwork: async () => ({ passphrase: Networks.TESTNET, protocolVersion: 29 }),
+  const server = { getNetwork: async () => ({ passphrase: Networks.TESTNET, protocolVersion: 30 }),
     getLedgerEntries: async (key) => ({ latestLedger: capture.observed_ledger, entries: [{ key,
       val: xdr.LedgerEntryData.fromXDR(stored.data_xdr, 'base64'), lastModifiedLedgerSeq: stored.last_modified_ledger,
       liveUntilLedgerSeq: stored.live_until_ledger }] }) };
   const network = new WalletNetwork({ server });
   assert.deepEqual(await network.targetIdentity(contract), { address: contract, executable: 'stellar_asset',
-    protocolVersion: 29, ledger: capture.observed_ledger });
+    protocolVersion: 30, ledger: capture.observed_ledger });
   await assert.rejects(network.targetIdentity(Keypair.random().publicKey()), /refused/);
   const original = server.getLedgerEntries;
   for (const mode of ['foreign contract', 'foreign key', 'temporary durability']) {
@@ -492,6 +492,6 @@ test('target identity reports the canonical native SAC builtin without inventing
     await assert.rejects(network.targetIdentity(contract), /refused/, mode);
   }
   server.getLedgerEntries = original;
-  server.getNetwork = async () => ({ passphrase: Networks.PUBLIC, protocolVersion: 29 });
+  server.getNetwork = async () => ({ passphrase: Networks.PUBLIC, protocolVersion: 30 });
   await assert.rejects(network.targetIdentity(contract), /refused/);
 });

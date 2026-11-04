@@ -152,14 +152,18 @@ The source-reviewed account method inventory and its limits are described in
    follows the signer/policy closure, checks reference counts and `Count`, observes the code at
    every installed policy address and at each contract verifier named by an external signer,
    reads the classic account entry (master weight, thresholds, extra signers) of every `G…`
-   signer in the closure and of each classic account the caller names, and re-reads the
-   account instance; the classic reads count against the same signed batch budget. It retries
-   a changed
-   endpoint ledger or instance as a whole. Returned archived or undecodable entries, missing
-   referenced entries, and a count mismatch fail closed as incomplete account state; exceeded
-   scan bounds, including a fixed 24 MiB ceiling on the entry XDR one scan retains, fail closed
-   as a budget error. Its output remains an
-   endpoint-reported inspection: equal `latestLedger` values across calls are not an
+   signer in the closure and of each classic account the caller names; the classic reads count
+   against the same signed batch budget. It checks the endpoint's network once per attempt
+   and takes every value from one `getLedgerEntries` response whose closure lies inside its
+   own request (stellar-rpc reads one request at the one ledger it reports); earlier responses
+   only name keys, so a ledger closing between calls does not stop it. A closure that keeps
+   changing until the batch budget runs out is retried as a whole. Above 200 keys, one
+   request's limit, it reads in batches that must report the same ledger and re-reads the
+   account instance, retrying a changed ledger or instance. Returned archived or undecodable
+   entries, missing referenced entries, and a count mismatch fail closed as incomplete account
+   state; exceeded scan bounds, including a fixed 24 MiB ceiling on the entry XDR one scan
+   retains, fail closed as a budget error. Its output remains an
+   endpoint-reported inspection: one response's `latestLedger` is not an
    authenticated ledger-state proof, and an omitted rule key is treated as a removed hole
    only when the stored count reconciles. The scan does not identify the wallet's intended
    administrator or establish complete reviewed method evidence. The scanner hashes the ordered
@@ -168,8 +172,9 @@ The source-reviewed account method inventory and its limits are described in
    on every payment: it is evidence, not the authority commitment). This digest identifies
    endpoint responses, not an authenticated ledger snapshot. Reading every classic signer in
    the closure, out-of-scope and expired rules included, keeps the read simple and archive-safe
-   at the cost of batches: an account with many unrelated classic signers can exhaust the
-   signed batch budget and fail closed.
+   at the cost of request keys: an account with many unrelated classic signers can push the
+   closure past 200 keys into the staged read, which can exhaust the signed batch budget and
+   fail closed.
    A structural adapter maps the completed scan into the pure authority model, requires
    observed code for every installed policy, and carries the classic account entries. Its
    output keeps the raw XDR/TTL digest separate from the decoded core-state digest: changing a
@@ -203,11 +208,11 @@ The source-reviewed account method inventory and its limits are described in
    Recognizing a binding (a reviewed registry entry, or a generated artifact rebuilt from its
    spec) is the toolkit's, from the binding set itself; the reader checks only that the
    address runs the expected code.
-   The resulting projection is still `rpc_reported`: matching endpoint ledger metadata across
-   calls and re-reading the instance do not authenticate a coherent ledger snapshot. A registry
-   signature covers implementation capabilities, not live ledger state, and nothing a client
-   sends can say who owns the account: owner matching stays with the key-holding wallet. The
-   missing assurances are required before a public authority list.
+   The resulting projection is still `rpc_reported`: one endpoint response, or matching ledger
+   metadata across calls and a re-read instance, does not authenticate a coherent ledger
+   snapshot. A registry signature covers implementation capabilities, not live ledger state,
+   and nothing a client sends can say who owns the account: owner matching stays with the
+   key-holding wallet. The missing assurances are required before a public authority list.
 
    The install intent (`ozpb prepare-install-intent`, MCP `prepare_install_intent`) runs that
    live check itself — there is no caller-supplied verdict — and, only when it returns no

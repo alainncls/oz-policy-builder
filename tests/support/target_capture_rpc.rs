@@ -2,7 +2,7 @@
 //! boundary tests of `capture-target`.
 //!
 //! The replies are the verbatim `result` objects in
-//! `crates/source-rpc/tests/captured-testnet/target-capture/`, the same ones the source-rpc
+//! `crates/source-rpc/tests/captured-testnet/target-capture-protocol30/`, the same ones the source-rpc
 //! conformance test replays in process. Here they travel over HTTP, so each shell's operator
 //! source configuration, transport and output path are the ones a real capture uses. Nothing
 //! reaches a network.
@@ -29,16 +29,16 @@ pub const NETWORK: &str = "Test SDF Network ; September 2015";
 pub fn recorded(method: &str) -> Value {
     let text = match method {
         "getNetwork" => include_str!(
-            "../../crates/source-rpc/tests/captured-testnet/target-capture/getNetwork.json"
+            "../../crates/source-rpc/tests/captured-testnet/target-capture-protocol30/getNetwork.json"
         ),
         "simulateTransaction" => include_str!(
-            "../../crates/source-rpc/tests/captured-testnet/target-capture/simulateTransaction.json"
+            "../../crates/source-rpc/tests/captured-testnet/target-capture-protocol30/simulateTransaction.json"
         ),
         "getLedgerEntries" => include_str!(
-            "../../crates/source-rpc/tests/captured-testnet/target-capture/getLedgerEntries.json"
+            "../../crates/source-rpc/tests/captured-testnet/target-capture-protocol30/getLedgerEntries.json"
         ),
         "getLedgers" => include_str!(
-            "../../crates/source-rpc/tests/captured-testnet/target-capture/getLedgers.json"
+            "../../crates/source-rpc/tests/captured-testnet/target-capture-protocol30/getLedgers.json"
         ),
         other => panic!("no recorded reply for {other}"),
     };

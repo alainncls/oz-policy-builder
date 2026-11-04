@@ -14,7 +14,7 @@ async function monitoredInstallation() {
   f.network.contractLiveness = async (address) => ({ found: true, wasmHash: address === record.account ? ACCOUNT_WASM : address === f.f.wallet.verifier ? WEBAUTHN_WASM : record.policyCodeHash,
     instanceLiveUntil: f.state.ledger + 500, codeLiveUntil: f.state.ledger + 500, ledger: f.state.ledger });
   f.network.targetIdentity = async () => ({ address: Asset.native().contractId(Networks.TESTNET), executable: 'stellar_asset',
-    protocolVersion: 29, ledger: f.state.ledger });
+    protocolVersion: 30, ledger: f.state.ledger });
   f.toolchain.authority = async (command, input) => {
     assert.equal(command, 'check-installed-grant'); assert.equal(input.installed_rule.id, record.ruleId);
     return { schema: 'ozpb:installed-grant-observation:v1', installed_rule_id: record.ruleId, status: 'observed', reason: null,

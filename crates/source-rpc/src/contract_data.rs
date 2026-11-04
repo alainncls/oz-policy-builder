@@ -216,19 +216,10 @@ fn parse_contract_data(
                 "getLedgerEntries entry {index} was modified after reported latestLedger"
             )));
         }
-        let status = if live_until < latest {
-            ContractDataStatus::Archived {
-                value: data.val,
-                last_modified_ledger: last_modified,
-            }
-        } else {
-            ContractDataStatus::Present {
-                value: data.val,
-                last_modified_ledger: last_modified,
-                live_until_ledger: live_until,
-            }
-        };
-        observed.insert(key.to_string(), status);
+        observed.insert(
+            key.to_string(),
+            returned_status(data.val, last_modified, live_until, latest),
+        );
         entry_payloads.insert(key.to_string(), payload_xdr);
     }
     Ok((
@@ -239,6 +230,28 @@ fn parse_contract_data(
         },
         entry_payloads,
     ))
+}
+
+/// A returned value's status at the ledger its response reports: archived once its TTL has
+/// ended there. Shared with the account scan's closure read.
+pub(crate) fn returned_status(
+    value: ScVal,
+    last_modified_ledger: u32,
+    live_until_ledger: u32,
+    reported_latest_ledger: u32,
+) -> ContractDataStatus {
+    if live_until_ledger < reported_latest_ledger {
+        ContractDataStatus::Archived {
+            value,
+            last_modified_ledger,
+        }
+    } else {
+        ContractDataStatus::Present {
+            value,
+            last_modified_ledger,
+            live_until_ledger,
+        }
+    }
 }
 
 fn ledger_field(entry: &serde_json::Value, index: usize, field: &str) -> Result<u32, RpcError> {

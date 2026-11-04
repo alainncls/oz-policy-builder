@@ -388,3 +388,32 @@ fn a_present_instance_does_not_hide_omitted_code() {
         .any(|(key, value)| matches!(key, LedgerKey::ContractCode(_)) && value.is_none()));
     assert!(capture.entries.iter().any(|(key,value)| matches!(key,LedgerKey::ContractData(data) if data.key==ScVal::LedgerKeyContractInstance)&&value.is_some()));
 }
+
+#[test]
+fn policy_state_accepts_a_real_protocol30_header() {
+    struct HeaderOnly(Value);
+    impl RpcTransport for HeaderOnly {
+        fn call(&self, method: &str, _: Value) -> Result<Value, RpcError> {
+            assert_eq!(method, "getLatestLedger");
+            Ok(self.0.clone())
+        }
+    }
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../tests/captured-testnet/protocol30-headers.json"
+    ))
+    .unwrap();
+    for value in fixture["ledgers"].as_array().unwrap() {
+        let captured = stellar_xdr::LedgerHeaderHistoryEntry::from_xdr_base64(
+            value["headerXdr"].as_str().unwrap(),
+            xdr_limits(),
+        )
+        .unwrap();
+        let rpc = HeaderOnly(json!({
+            "id":value["hash"],"sequence":value["sequence"],"protocolVersion":30,
+            "headerXdr":captured.header.to_xdr_base64(xdr_limits()).unwrap()
+        }));
+        let checked = header(&rpc).unwrap();
+        assert_eq!(checked.protocol, 30);
+        assert_eq!(checked.sequence, captured.header.ledger_seq);
+    }
+}

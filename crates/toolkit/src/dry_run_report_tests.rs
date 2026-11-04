@@ -119,7 +119,7 @@ fn expectation(preparation: &DryRunOutput) -> NativeExpectation {
         suite_hash: preparation.binding.suite_hash.clone(),
         state_hash: "44".repeat(32),
         source_network_id: testnet(),
-        source_protocol_version: 29,
+        source_protocol_version: 30,
         source_ledger: 1000,
         account_address: account_address(),
         delegate_address: delegate(),

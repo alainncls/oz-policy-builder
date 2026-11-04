@@ -12,6 +12,7 @@
 
 #![forbid(unsafe_code)]
 
+mod account_closure_read;
 mod account_entry_page;
 mod account_reconciliation;
 mod account_state_projection;
@@ -105,7 +106,8 @@ const MAX_LEDGER_ENTRY_KEYS: usize = 200;
 ///
 /// Usually that protocol is the crate's major version, but not always. Protocol 29 changed no
 /// XDR: stellar-core v29.0.0 builds against the same `stellar/stellar-xdr` commit as v28.0.x,
-/// which is the commit `stellar-xdr` 28 compiles, so this build decodes protocol 29 as it is.
+/// so the previous decoder could accept protocol 29 without an XDR bump. Protocol 30 changes
+/// ledger headers and addresses; this build therefore uses its stable XDR 30 definitions.
 ///
 /// There is no historical-protocol floor (zero is invalid). `getNetwork` reports the protocol the endpoint is on now,
 /// which bounds what it can newly produce; it says nothing about the protocol of an old
@@ -248,6 +250,37 @@ fn redact_ledger_request_error(error: RpcError) -> RpcError {
 /// responder so parsing is verified without a network.
 pub trait RpcTransport {
     fn call(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value, RpcError>;
+}
+
+/// One `getNetwork` for a whole acquisition: the first answer is kept and given to every later
+/// network check through this transport, so readers that check the network themselves ask the
+/// endpoint nothing more, and no extra request lands between two reads meant to see one ledger.
+pub(crate) struct OneNetworkCheck<'a, T> {
+    transport: &'a T,
+    network: std::cell::RefCell<Option<serde_json::Value>>,
+}
+
+impl<'a, T> OneNetworkCheck<'a, T> {
+    pub(crate) fn new(transport: &'a T) -> Self {
+        Self {
+            transport,
+            network: std::cell::RefCell::new(None),
+        }
+    }
+}
+
+impl<T: RpcTransport> RpcTransport for OneNetworkCheck<'_, T> {
+    fn call(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value, RpcError> {
+        if method != "getNetwork" {
+            return self.transport.call(method, params);
+        }
+        if let Some(network) = self.network.borrow().as_ref() {
+            return Ok(network.clone());
+        }
+        let network = self.transport.call(method, params)?;
+        *self.network.borrow_mut() = Some(network.clone());
+        Ok(network)
+    }
 }
 
 /// HTTP transport over a single Stellar RPC endpoint.
@@ -803,11 +836,7 @@ fn parse_contract_executables(
                     "getLedgerEntries entry {index} liveUntilLedgerSeq exceeds u32"
                 ))
             })?;
-        if live_until_ledger < observed_ledger {
-            return Err(RpcError::Evidence(format!(
-                "getLedgerEntries entry {index} is not live at reported ledger {observed_ledger}"
-            )));
-        }
+        require_live(index, live_until_ledger, observed_ledger)?;
         // `getLedgerEntries` returns the *current* value of a live entry, and reports both
         // sequences: the ledger it is serving (`latestLedger`) and the ledger that last wrote
         // the entry. An entry written after the ledger being served describes no ledger that
@@ -846,24 +875,7 @@ fn parse_contract_executables(
                 "getLedgerEntries entry {index} does not match its requested contract instance"
             )));
         }
-        let ScVal::ContractInstance(instance) = contract_data.val else {
-            return Err(RpcError::Malformed(format!(
-                "getLedgerEntries entry {index} is not a contract instance"
-            )));
-        };
-        let executable = match instance.executable {
-            ContractExecutable::Wasm(hash) => ObservedExecutable::Wasm {
-                code_hash: ozpb_domain::Hash32(hash.0),
-            },
-            ContractExecutable::StellarAsset => ObservedExecutable::StellarAsset,
-            ContractExecutable::ExternalRef(ref r) => {
-                return Err(RpcError::ExternalRefExecutable {
-                    contract: address.clone(),
-                    owner: r.executable_owner.to_string(),
-                    tag: r.tag.to_string(),
-                });
-            }
-        };
+        let executable = instance_executable(index, address, contract_data.val)?;
         // Deliberately *not* also required: that `observed_ledger` is at or after the
         // transaction/simulation ledger. It usually is, since this call is made after that
         // acquisition, but a load-balanced endpoint can answer from a node a few ledgers
@@ -894,6 +906,48 @@ fn parse_contract_executables(
         )));
     }
     Ok(observations)
+}
+
+/// A contract instance is persistent storage: once its TTL has ended before the ledger its
+/// response reports, it is archived there and its code is not live. Every contract-code reader
+/// applies this, the account scan's closure read included.
+fn require_live(
+    index: usize,
+    live_until_ledger: u32,
+    observed_ledger: u32,
+) -> Result<(), RpcError> {
+    if live_until_ledger < observed_ledger {
+        return Err(RpcError::Evidence(format!(
+            "getLedgerEntries entry {index} is not live at reported ledger {observed_ledger}"
+        )));
+    }
+    Ok(())
+}
+
+/// The executable a returned contract instance runs, shared by every contract-code reader.
+fn instance_executable(
+    index: usize,
+    address: &str,
+    value: ScVal,
+) -> Result<ObservedExecutable, RpcError> {
+    let ScVal::ContractInstance(instance) = value else {
+        return Err(RpcError::Malformed(format!(
+            "getLedgerEntries entry {index} is not a contract instance"
+        )));
+    };
+    Ok(match instance.executable {
+        ContractExecutable::Wasm(hash) => ObservedExecutable::Wasm {
+            code_hash: ozpb_domain::Hash32(hash.0),
+        },
+        ContractExecutable::StellarAsset => ObservedExecutable::StellarAsset,
+        ContractExecutable::ExternalRef(ref r) => {
+            return Err(RpcError::ExternalRefExecutable {
+                contract: address.to_string(),
+                owner: r.executable_owner.to_string(),
+                tag: r.tag.to_string(),
+            });
+        }
+    })
 }
 
 fn parse_simulate(
@@ -2237,6 +2291,7 @@ mod tests {
         (28, "9c9c145953e80990d6ff1ae3a6a973a0ce6d0694"),
         // stellar-core v29.0.0: the same commit. Protocol 29 changed no XDR.
         (29, "9c9c145953e80990d6ff1ae3a6a973a0ce6d0694"),
+        (30, "4f524bbac80c781c06e4fb5fc93a2d0d331d6705"),
     ];
 
     /// The protocol ceiling is not a number somebody chose: it is the newest protocol whose XDR

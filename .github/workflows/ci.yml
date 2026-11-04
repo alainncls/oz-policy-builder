@@ -218,7 +218,7 @@ jobs:
           ( cd contracts/soroswap-swap-policy && cargo "+$NIGHTLY" fmt --all --check )
 
   native-execution:
-    name: native execution (protocol 29 · framing · ABI)
+    name: native execution (protocol 30 · framing · ABI)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

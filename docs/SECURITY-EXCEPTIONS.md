@@ -59,6 +59,26 @@ inventories, accepted limitations and the 10 November expiry remain unchanged. T
 continued bounded risk acceptance, not advisory remediation. See
 [dependency compatibility](SOROBAN-DEPENDENCIES.md).
 
+## Native runtime reassessment (4 November 2026)
+
+The protocol-30 worker uses soroban-sdk 30.0.0-rc.1 and stable soroban-env-host 30.0.0.
+Generated contracts remain on SDK 28. The runtime inventory records this source/dependency
+reassessment; the original **10 November 2026 expiry is unchanged**.
+
+Host 30's P256 verification, ECDSA signature parsing and K256 public-key recovery code is
+byte-identical to host 29.0.1; `src/crypto/mod.rs` adds only the ML-DSA module declaration.
+The verification/recovery host wrappers and elliptic-curve dependency requirements are also
+unchanged. The locked affected versions remain crypto-bigint 0.5.5, elliptic-curve 0.13.8,
+ECDSA 0.16.9, K256 0.13.4, P256 0.13.2 and primeorder 0.13.6. Affected public-input
+verification/recovery arithmetic remains reachable; project signing still uses Ed25519.
+
+The new ML-DSA functions decode verifying keys and signatures and verify them; their dependency
+closure contains no crypto-bigint or elliptic-curve. This adds no ECDSA private-key operation.
+The locked ML-DSA and ctutils versions are outside their published affected ranges; no
+additional advisory exception is introduced. This is static source/dependency review, not a
+timing or machine-code proof, and it does not fix RUSTSEC-2026-0387. The existing acceptance
+limits and maintainer approval requirement remain in force.
+
 ## Limits and removal
 
 This review does not prove constant-time execution, exclude disclosure of confidential

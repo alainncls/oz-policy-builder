@@ -96,7 +96,7 @@ Wasm in the host tests.
 
 `bash scripts/test-atomic-live-helper.sh` generates the candidate policy, builds the helper from
 source, checks its export set, and runs `execution-runtime/tests/atomic_helper.rs` on a
-protocol-29 host with the pinned account Wasm, the generated policy Wasm, the reviewed helper
+protocol-30 host with the pinned account Wasm, the generated policy Wasm, the reviewed helper
 Wasm (its hash is asserted) and the real native asset contract. Every authorization is a real
 Ed25519 signature over its address-bound (`AddressV2`) preimage, by distinct synthetic owner and
 delegate keys; no authorization is mocked. These are automated keys, not wallet or human

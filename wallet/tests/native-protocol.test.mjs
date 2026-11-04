@@ -124,3 +124,9 @@ test('a key for another delegate cannot create an offline signer', () => {
   assert.throws(() => createOfflineSigner({ prepared: f.prepared, caseIds: ['case:0'],
     signer: offlineCapability({ publicKey: () => Keypair.random().publicKey(), sign: () => { throw new Error('must not sign'); }, verify: (b, s) => Keypair.random().verify(b, s) }) }), /refused/);
 });
+
+for (const protocol of [29, 31]) {
+  test(`offline signing refuses unsupported source protocol ${protocol}`, () => {
+    assert.throws(() => offlineDomain({ ...vector.binding, source_protocol_version: protocol }), /refused/);
+  });
+}

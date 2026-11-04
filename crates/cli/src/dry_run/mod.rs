@@ -55,7 +55,7 @@ pub struct DryRunArgs {
     /// The pinned smart-account Wasm the worker installs. Its SHA-256 must be the pin.
     #[arg(long)]
     account_wasm: PathBuf,
-    /// Source ledger JSON: {protocol_version: 29, sequence, timestamp (decimal string),
+    /// Source ledger JSON: {protocol_version: 30, sequence, timestamp (decimal string),
     /// base_reserve, min_temp_entry_ttl, min_persistent_entry_ttl, max_entry_ttl}.
     #[arg(long)]
     source_ledger: PathBuf,

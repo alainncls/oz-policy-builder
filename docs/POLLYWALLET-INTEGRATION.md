@@ -50,9 +50,9 @@ pnpm build
 pnpm exec vitest run src/lib/__tests__/policy-builder-bridge.test.ts
 ```
 
-The upstream wallet keeps SDK 16.2.0. The nested validator package pins SDK 17.2.1.
+The applied outer wallet pins SDK 16.4.1 with its lockfile; the nested validator package pins SDK 17.4.0.
 Only serialized XDR crosses that boundary. Do not deduplicate the Stellar SDK packages or
-silently replace the upstream dependency lock. The browser uses the upstream `buffer`
+replace the reviewed dependency locks independently. The browser uses the upstream `buffer`
 polyfill, so URL-safe base64 is encoded explicitly rather than relying on Node-only encodings.
 The package-scoped `#wallet-stellar-sdk` import and explicit Vite alias keep the development
 optimizer from reusing the upstream SDK 16 bundle for SDK 17 validators.
@@ -261,7 +261,7 @@ deployment:
    next context rule ID from the reviewed authority evidence and a fresh run nonce. Its run
    hash, suite hash and per-case reference expectations become the independent expectations.
    Without a bounded next-ID enumeration in that evidence, the layer stays `unavailable`.
-2. The operator RPC supplies one coherent protocol-29 ledger header, the archival TTL limits
+2. The operator RPC supplies one coherent protocol-30 ledger header, the archival TTL limits
    and the pinned account Wasm bytes, within twelve ledgers of each other.
 3. The worker runs once with `--prepare`; the wallet checks that frame against step 1 and the
    offline signing domain, then runs the identical job interactively. Every repeated frame
@@ -781,7 +781,7 @@ wallet. A custom-source review, risk acknowledgement and installation flow is no
 open. It compares the exact recorded rule, account/policy/owner-verifier code and installation
 marker, and rechecks modeled authority against the InstallationRecord commitment. The
 supported native-token target has a Stellar Asset host executable, not a Wasm hash; monitoring
-checks its canonical native-testnet address, executable kind and protocol 29 explicitly.
+checks its canonical native-testnet address, executable kind and protocol 30 explicitly.
 
 The ordinary install authority check correctly sees an already installed stateful rule as
 an overlapping grant. The separate `ozpb check-installed-grant` command instead validates
@@ -811,3 +811,11 @@ interface. Verified rule removal remains separate from best-effort policy cleanu
 configuration differs from the recorded one, cleanup is reported `not_checked`; an observation
 of the old policy is never attributed to the newly removed policy. Otherwise cleanup requires
 the expected policy code and fresh instance/code/marker observations.
+
+### Protocol-30 builtin identity
+
+The current native-SAC monitoring model explicitly recognizes protocol 30 and its reviewed
+plain-address transfer shape. It is not an automatic acceptance of future builtin changes:
+other protocol versions still report target identity drift. Muxed contract recipients are not
+added to the supported grant shape. Rebuild/restart an older protocol-29 backend before using
+it on current testnet, and obtain fresh checks; prior observations are not current evidence.

@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "local_harness_record",
+  "limitations": [
+    "Local files can be edited; this summary is not authenticated ledger evidence or a milestone verdict.",
+    "Artifact hashes identify exact file bytes, not independent reproduction or canonical spec identity.",
+    "A missing install record does not prove that nothing was submitted.",
+    "Denials describe enforcing simulations, not failed on-chain transactions.",
+    "Passkey runs use an exportable software credential in a virtual authenticator.",
+    "Authority trust, when used, is operator-supplied test configuration.",
+    "A recorded reproduction result is a local observation; it is not live preflight or a wallet acceptance verdict."
+  ],
+  "provenance": {
+    "status": "exited_zero",
+    "started_at": "2026-11-04T12:12:49.959Z",
+    "finished_at": "2026-11-04T12:14:07.703Z",
+    "exit_code": 0,
+    "checkout_commit": "bfd6b8450138a556a994f3b3ea458b0b8310b80e",
+    "checkout_dirty": false,
+    "node_version": "24.15.0",
+    "cli": {
+      "mode": "external",
+      "binary_sha256": "ab0eaf14e335f07df0e0d5033168903b3ad173ff2aa31685123f391b75a62abe"
+    }
+  },
+  "run": {
+    "network": "testnet",
+    "protocol": 30,
+    "account": "CD53DP7AZWIJGCFAPHBGREUJUCCWP6ZWWV77FBHNMTGU5RUR2BNPGPEP",
+    "account_code_hash": "a12747ff6c139dc14fc2fd30d200d6bbb5da7b5d59812c047ce1f9cad226b289",
+    "owner": {
+      "kind": "ed25519",
+      "address": "GCWFMUMB7JTG7YFDVGF4NWICTVA5UALQ4MGHRAX2W5OI4WYTUVLQIF75"
+    },
+    "delegate": "GCB5RDVBCM5G5DVWMRP55RS3DQAGDHC2IBVXRNHUYKPKAC4PYU4QZN3R",
+    "target": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "recipient": "GCKRPM4JAP3DQD3NPQ7Y2RDWFA67O77N5FIAMWSHKFTCPIXYYYQVVT6W",
+    "amount": "10000000",
+    "valid_until_ledger": 5571433,
+    "registry_root": "3e7c6ca88af0aa98b9153986d07a8e871538991981a82fe2406550187e18f5a6",
+    "policy": "CCOVMKC2EJB735HVMARPULBVIUU75D4COGDBY3COOMANJKLICCNKV72P",
+    "policy_wasm_hash": "1e38e22f9850ca191397c542b34e4aa772c81c728807966aa0feb6f14d2b60b1",
+    "rule_id": 1,
+    "installation": "recorded",
+    "transactions": {
+      "deploy_account": "d1e1304a2af1f8929d84b3dad8bb80452f6e9ca551750d65a3b82fc174425bbb",
+      "fund_account": "f0d6ab94a46bfa18d506997ee75e92dca91cfdab314402d93cf45e3467572168",
+      "upload_policy": "6eb1bf5a57be2984e51eaa723cf3fb225c645b03d8e2aa0093ceb70f5dd68501",
+      "create_policy": "1d654fd1822205decb6f75ace2249f948899b28a898d6ec89b7994f787aa051d",
+      "add_context_rule": "c306b5cd23612fafcff5184e8f3075204666a373783d16b7881c1f74cde92001"
+    },
+    "authority": {
+      "status": "rechecked",
+      "authority_commitment": "00f054bd8c5da5372040e290c2927a875a5541f1232cc4b4dd05b86bc41b79dc",
+      "checked_at_ledger": 5554156,
+      "rechecked_at_ledger": 5554156
+    },
+    "invocations": [
+      {
+        "signer": "owner",
+        "rule": 0,
+        "amount": "10000000",
+        "to": "GCKRPM4JAP3DQD3NPQ7Y2RDWFA67O77N5FIAMWSHKFTCPIXYYYQVVT6W",
+        "result": "permit",
+        "ledger": 5554153,
+        "observation": "submitted_transaction",
+        "transaction": "ddf2750f0e1cb160f155bd069bd917e0641428eb10da2f7da234ebb06b39eac3"
+      },
+      {
+        "signer": "delegate",
+        "rule": 1,
+        "amount": "10000000",
+        "to": "GCKRPM4JAP3DQD3NPQ7Y2RDWFA67O77N5FIAMWSHKFTCPIXYYYQVVT6W",
+        "result": "permit",
+        "ledger": 5554159,
+        "observation": "submitted_transaction",
+        "transaction": "20f836422413643be0019b6d4913af6a4083239daea31ee384352f39e6188e09"
+      },
+      {
+        "signer": "delegate",
+        "rule": 1,
+        "amount": "10000001",
+        "to": "GCKRPM4JAP3DQD3NPQ7Y2RDWFA67O77N5FIAMWSHKFTCPIXYYYQVVT6W",
+        "result": "deny",
+        "ledger": 5554159,
+        "observation": "enforcing_simulation",
+        "transaction": null,
+        "enforcer": "CCOVMKC2EJB735HVMARPULBVIUU75D4COGDBY3COOMANJKLICCNKV72P",
+        "code": 6
+      },
+      {
+        "signer": "delegate",
+        "rule": 1,
+        "amount": "10000000",
+        "to": "GAACJ6QNYO3BJHFSSRYUF6MLCGFTIGVNKZXUPTRM4N6GAMD5DHAQ5FUY",
+        "result": "deny",
+        "ledger": 5554159,
+        "observation": "enforcing_simulation",
+        "transaction": null,
+        "enforcer": "CCOVMKC2EJB735HVMARPULBVIUU75D4COGDBY3COOMANJKLICCNKV72P",
+        "code": 6
+      },
+      {
+        "signer": "delegate",
+        "rule": 1,
+        "amount": "10000000",
+        "to": "GCKRPM4JAP3DQD3NPQ7Y2RDWFA67O77N5FIAMWSHKFTCPIXYYYQVVT6W",
+        "result": "deny",
+        "ledger": 5554159,
+        "observation": "enforcing_simulation",
+        "transaction": null,
+        "enforcer": "CCOVMKC2EJB735HVMARPULBVIUU75D4COGDBY3COOMANJKLICCNKV72P",
+        "code": 7
+      },
+      {
+        "signer": "delegate",
+        "rule": 1,
+        "amount": "10000000",
+        "to": "GCKRPM4JAP3DQD3NPQ7Y2RDWFA67O77N5FIAMWSHKFTCPIXYYYQVVT6W",
+        "result": "deny",
+        "control": "post_revocation",
+        "ledger": 5554161,
+        "observation": "enforcing_simulation",
+        "transaction": null,
+        "enforcer": "CD53DP7AZWIJGCFAPHBGREUJUCCWP6ZWWV77FBHNMTGU5RUR2BNPGPEP",
+        "code": 3000
+      }
+    ]
+  },
+  "pipeline": {
+    "status": "recorded",
+    "recorded_transaction": "ddf2750f0e1cb160f155bd069bd917e0641428eb10da2f7da234ebb06b39eac3",
+    "recording_hash": "702dd259cec9651a93ff5636429315a17ac4988faa6282fe003b59b2a8e9bc20",
+    "acquisition_trust": "rpc_reported",
+    "synthesis_recording_hash": "24d00192a1062f97d5ea53829694143aea3fecbd869eaf1114a13a4e5add9991",
+    "synthesis_trust": "self_supplied",
+    "spec_hash": "564e14f6b5b1ab417fd9370736c7148660c2aa0ce8bbac60531bab3c33555182",
+    "normalized_input_hash": "0d13571db982f8e9f2fd840e318d21bb47c7e2655db0f6541be5a28b3e4cf7be",
+    "reference_cases": 30,
+    "artifact_reproduction": "matched",
+    "current_network_preflight": "not_checked_here",
+    "models_all_policies": true,
+    "unmodeled_reviewed_policies": []
+  },
+  "lifecycle": {
+    "status": "recorded",
+    "removals": [
+      {
+        "rule_id": 1,
+        "transaction": "977ae1282ec7a6d2332c6ae855cabd4bdbe9e59a6e8ccc838d73b2473530b3e4",
+        "ledger": 5554161,
+        "event": "verified",
+        "rule_readback": "absent",
+        "policy_cleanup": "not_installed"
+      }
+    ],
+    "configuration_checks": [
+      {
+        "configuration": "matched",
+        "observation": "non_atomic",
+        "read_ledgers": {
+          "account_code": 5554158,
+          "policy_code": 5554158,
+          "rule": 5554158
+        },
+        "rule_id": 1,
+        "account_code_hash": "a12747ff6c139dc14fc2fd30d200d6bbb5da7b5d59812c047ce1f9cad226b289",
+        "policy_code_hash": "1e38e22f9850ca191397c542b34e4aa772c81c728807966aa0feb6f14d2b60b1"
+      },
+      {
+        "configuration": "matched",
+        "observation": "non_atomic",
+        "read_ledgers": {
+          "account_code": 5554159,
+          "policy_code": 5554159,
+          "rule": 5554159
+        },
+        "rule_id": 1,
+        "account_code_hash": "a12747ff6c139dc14fc2fd30d200d6bbb5da7b5d59812c047ce1f9cad226b289",
+        "policy_code_hash": "1e38e22f9850ca191397c542b34e4aa772c81c728807966aa0feb6f14d2b60b1"
+      }
+    ]
+  },
+  "failure_cleanup": {
+    "status": "not_recorded"
+  },
+  "artifacts": {
+    "run": {
+      "sha256": "b4d2a1af586159b3fffaa870539e73a313d79e78a3c0c2aa821081b64f9b68d1",
+      "bytes": 6554
+    },
+    "provenance": {
+      "sha256": "b6078440773129ae76197d43dd4ee4c5140cbc3c6f345082644328ec3940e4c1",
+      "bytes": 382
+    },
+    "pipeline": {
+      "sha256": "bfabe85b01fc536817e0c747dde2ae637e599bdd2c1dfd823b3326a3f21ee54b",
+      "bytes": 816
+    },
+    "spec": {
+      "sha256": "861dd7dd946154beb3701cb3fac68dc32757b54e551b543a577fcc393318e9b8",
+      "bytes": 2596
+    },
+    "recording": {
+      "sha256": "66aea46f66d9bf5289a791cefe5416a5fbcd51c48f57ef827bf8be6cbd3680cc",
+      "bytes": 14227
+    },
+    "import_bundle": {
+      "sha256": "e687b7f8002743b95df8b2b4453959b523385ee59047e7e1aabde8cb7220ac46",
+      "bytes": 8812
+    },
+    "synthesis": {
+      "sha256": "d53270a3b2cca793f272abc62bd7bdb47c148d622b2832a372af797c82d2ba83",
+      "bytes": 3364
+    },
+    "decisions": {
+      "sha256": "bf3c799cb002e803d575231e2c3e5a8ca4229c3c86047e357615b4a37fa992f0",
+      "bytes": 378
+    },
+    "reference_suite": {
+      "sha256": "5faef4f60ca9e9fce0ceae98d80bfb1c84b1c580f34037cbe8db863f42555c45",
+      "bytes": 9464
+    },
+    "verification": {
+      "sha256": "25f4f26a8551a51835d9d48257e31b54e2d58fe60ff1b47e764c759a196bf38f",
+      "bytes": 569
+    },
+    "build_manifest": {
+      "sha256": "3d86e306dcb4e3fc0f8c01a629468c567b2db3a409ee317fe0d2a1511e882d1c",
+      "bytes": 1033
+    },
+    "policy_wasm": {
+      "sha256": "1e38e22f9850ca191397c542b34e4aa772c81c728807966aa0feb6f14d2b60b1",
+      "bytes": 22950
+    }
+  }
+}

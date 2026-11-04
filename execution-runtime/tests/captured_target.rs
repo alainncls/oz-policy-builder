@@ -1,4 +1,4 @@
-//! Actual SDK-29 native SAC, pinned account Wasm and freshly generated policy over a capture.
+//! Actual SDK-30 native SAC, pinned account Wasm and freshly generated policy over a capture.
 //! The capture here is built locally from a real SAC deployment; it is not an RPC observation.
 #[path = "support/captured_fixture.rs"]
 mod captured_fixture;

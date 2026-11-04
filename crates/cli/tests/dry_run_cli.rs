@@ -69,7 +69,6 @@ fn dry_run_runs_the_captured_layer_through_a_replayed_capture() {
         [
             "getNetwork",
             "simulateTransaction",
-            "getNetwork",
             "getLedgerEntries",
             "getLedgers"
         ]

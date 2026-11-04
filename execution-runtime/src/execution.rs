@@ -128,7 +128,7 @@ fn decode_wasm(value: &str) -> RuntimeResult<Vec<u8>> {
 }
 
 pub fn prepare(job: NativeJob) -> RuntimeResult<PreparedExecution> {
-    if job.schema != 1 || job.ledger.protocol_version != 29 || job.ledger.sequence == 0 {
+    if job.schema != 1 || job.ledger.protocol_version != 30 || job.ledger.sequence == 0 {
         return Err("unsupported job schema or source protocol".into());
     }
     let timestamp: u64 = job.ledger.timestamp.parse().map_err(|_| "timestamp")?;
@@ -1142,8 +1142,101 @@ pub fn execute(
     Ok(ExecutionReport {
         frame_type: "result".into(), schema: 1, binding: input.binding.clone(), execution_network_id: input.execution_network_id.clone(),
         account_code_hash: input.account_code_hash.clone(), policy_address: input.policy_address.clone(), policy_code_hash: input.policy_code_hash.clone(),
-        host_version: "soroban-env-host/29.0.1".into(), local_rule_id: LOCAL_RULE_ID, candidate_context_rule_id: input.candidate_context_rule_id,
+        host_version: "soroban-env-host/30.0.0".into(), local_rule_id: LOCAL_RULE_ID, candidate_context_rule_id: input.candidate_context_rule_id,
         provenance: "fresh_local_candidate_boundary_states; counter seeds and ledgers are synthetic; no wallet ownership or live state claim".into(),
         cases: results, controls, stateful, required_classes: ozpb_harness::expected_classes(&input.spec).remove(&input.job.request.candidate.rule_index).ok_or("coverage requirements")?, passed, complete: false,
     })
+}
+
+#[cfg(test)]
+mod protocol30_compatibility {
+    use super::*;
+
+    struct Capability(SigningKey);
+    impl DelegateSigner for Capability {
+        fn sign(
+            &mut self,
+            request: &crate::SignRequest,
+        ) -> RuntimeResult<crate::SignatureResponse> {
+            Ok(crate::SignatureResponse {
+                frame_type: "signature".into(),
+                request_id: request.request_id.clone(),
+                public_key_hex: hex::encode(self.0.verifying_key().to_bytes()),
+                signature_hex: hex::encode(
+                    self.0
+                        .sign(&hex::decode(&request.digest_hex).unwrap())
+                        .to_bytes(),
+                ),
+            })
+        }
+    }
+
+    #[test]
+    #[ignore = "requires freshly generated SDK28 policy Wasm; run scripts/test-native-execution.sh"]
+    fn sdk28_generated_wasm_refuses_a_muxed_form_of_allowed_contract_address_on_host30() {
+        let job: NativeJob = serde_json::from_slice(
+            &std::fs::read(std::env::var("OZPB_NATIVE_TEST_JOB").unwrap()).unwrap(),
+        )
+        .unwrap();
+        let input = prepare(job).unwrap();
+        let original = input
+            .suite
+            .iter()
+            .find(|case| case.class == MutationClass::Original)
+            .unwrap()
+            .clone();
+        let mut capability = Capability(SigningKey::from_bytes(&[42; 32]));
+        let mut runner = Runner {
+            input: &input,
+            capability: &mut capability,
+            request_count: 0,
+            started: Instant::now(),
+        };
+        let (env, account, policy) = setup(&input, &original).unwrap();
+        let allowed = runner
+            .attempt(
+                &env,
+                &account,
+                &policy,
+                &original,
+                "p30:plain",
+                Mutation::None,
+                None,
+            )
+            .unwrap();
+        assert!(
+            allowed.result.is_ok(),
+            "plain address control: {:?}",
+            allowed.result
+        );
+
+        let mut muxed = original;
+        let account_id =
+            stellar_strkey::Contract::from_string(&input.binding.account_address).unwrap();
+        let value = xdr::ScVal::Address(xdr::ScAddress::MuxedContract(xdr::MuxedContract {
+            id: 7,
+            contract_id: xdr::ContractId(xdr::Hash(account_id.0)),
+        }));
+        muxed.invocation.args[0] = ArgValue::ScvalXdr(value.to_xdr_base64(xdr_limits()).unwrap());
+        let (env, account, policy) = setup(&input, &muxed).unwrap();
+        let denied = runner
+            .attempt(
+                &env,
+                &account,
+                &policy,
+                &muxed,
+                "p30:muxed",
+                Mutation::None,
+                None,
+            )
+            .unwrap();
+        assert!(
+            matches!(&denied.result,Err(Ok(error)) if *error == soroban_sdk::Error::from_contract_error(6)),
+            "{:?}",
+            denied.result
+        );
+        assert!(denied.policy_attributed);
+        assert_eq!(denied.before, denied.after);
+        assert_eq!(denied.counter_before, denied.counter_after);
+    }
 }

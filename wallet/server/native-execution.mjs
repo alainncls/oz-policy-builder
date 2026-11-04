@@ -11,7 +11,7 @@ import { runNative } from './native-process.mjs';
 import { requestText } from './raw-json.mjs';
 
 const HASH = /^[0-9a-f]{64}$/;
-const HOST = 'soroban-env-host/29.0.1';
+const HOST = 'soroban-env-host/30.0.0';
 const PROVENANCE = 'fresh_local_candidate_boundary_states; counter seeds and ledgers are synthetic; no wallet ownership or live state claim';
 const CONTROLS = [['signature_bit', 'failed account authentication'], ['nonce_binding', 'failed account authentication'],
   ['payload_binding', 'Unauthorized function call'], ['context_rule_binding', 'Unauthorized function call'],
@@ -123,7 +123,7 @@ export const checkDryRunPreparation = guarded((output, candidate) => {
  */
 export const nativeJobText = guarded((request, accountWasmBase64, ledger) => {
   exact(ledger, LEDGER);
-  if (ledger.protocol_version !== 29 || !u32(ledger.sequence) || ledger.sequence < 1 || typeof ledger.timestamp !== 'string'
+  if (ledger.protocol_version !== 30 || !u32(ledger.sequence) || ledger.sequence < 1 || typeof ledger.timestamp !== 'string'
     || !/^(0|[1-9][0-9]{0,19})$/.test(ledger.timestamp) || BigInt(ledger.timestamp) > 0xffffffffffffffffn
     || [ledger.base_reserve, ledger.min_temp_entry_ttl, ledger.min_persistent_entry_ttl, ledger.max_entry_ttl].some((n) => !u32(n) || n < 1)
     || ledger.min_temp_entry_ttl > ledger.max_entry_ttl || ledger.min_persistent_entry_ttl > ledger.max_entry_ttl

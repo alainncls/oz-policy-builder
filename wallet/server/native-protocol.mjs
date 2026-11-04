@@ -23,11 +23,11 @@ function decode(value, Type) {
 export function offlineDomain(binding) {
   try {
     exact(binding, BINDING);
-    if (BINDING.slice(0, 5).some((key) => !HASH.test(binding[key])) || binding.source_protocol_version !== 29
+    if (BINDING.slice(0, 5).some((key) => !HASH.test(binding[key])) || binding.source_protocol_version !== 30
       || !integer(binding.source_ledger) || !StrKey.isValidContract(binding.account_address)
       || !StrKey.isValidEd25519PublicKey(binding.delegate_address)) refuse();
     const values = BINDING.slice(0, 5).map((key) => xdr.ScVal.scvString(binding[key]));
-    values.push(xdr.ScVal.scvU32(29), xdr.ScVal.scvU32(binding.source_ledger),
+    values.push(xdr.ScVal.scvU32(30), xdr.ScVal.scvU32(binding.source_ledger),
       xdr.ScVal.scvString(binding.account_address), xdr.ScVal.scvString(binding.delegate_address));
     const preimage = Buffer.from(xdr.ScVal.scvVec([xdr.ScVal.scvU32(2),
       xdr.ScVal.scvString('ozpb:v1:offline-execution'), xdr.ScVal.scvVec(values)]).toXDR());
