@@ -279,8 +279,8 @@ commit and toolchain as the pins in `ozpb_domain::pinned_upstream`:
 - Source: `github.com/OpenZeppelin/stellar-contracts` `v0.7.2` (`a9c42169000638da937577f592ebf61a7a3c94ca`),
   `examples/multisig-smart-account/webauthn-verifier`.
 - Build: `RUSTUP_TOOLCHAIN=1.91.1 stellar contract build` in that directory, with stellar-cli
-  27.0.0. That is the command `scripts/verify-pinned-upstream.sh` uses for the other pins, and the
-  same build reproduces the pinned account hash.
+  27.0.0. `scripts/verify-pinned-upstream.sh` runs this build for every pin, this verifier
+  (`OZ_WEBAUTHN_VERIFIER_WASM`) included, and checks the hash, the exports and the imports below.
 - Wasm hash: `e63a030d0f1a1481e36059a4837c433083b33e704c1f9625b7314795b6d72b76`
   (`PINNED_WEBAUTHN_VERIFIER_WASM` in `scripts/rpc.mjs`). `setup.mjs` deploys an instance from
   it, which needs the code already on the ledger: like the pinned account wasm, the harness
@@ -295,8 +295,9 @@ and not `update_current_contract_wasm`, the only way an instance's code can chan
 instance of this hash gives the same answer for the same input, and nobody, its deployer
 included, can change that.
 
-The version-3 development registry recognizes this exact verifier.
-`scripts/verify-pinned-upstream.sh` does not rebuild it. pollywallet's verifier is not this
+The version-3 development registry recognizes this exact verifier. The nightly live workflow's
+pinned account authorization job runs `scripts/verify-pinned-upstream.sh`, so the hash is rebuilt
+from the pinned source and compared on every scheduled run. pollywallet's verifier is not this
 code: its contract metadata shows a different soroban-sdk and stellar-cli, so it does not
 reproduce from our pinned inputs.
 
