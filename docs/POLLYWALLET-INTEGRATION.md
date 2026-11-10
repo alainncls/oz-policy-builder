@@ -93,6 +93,14 @@ an operator JSON file using absolute canonical paths:
 }
 ```
 
+`rpcUrl` is used by the backend and the CLI alike. Any standard Stellar RPC endpoint works, but the
+sample transfer, installation and removal must finish their reads within 12 ledgers (about a
+minute), so the endpoint has to answer in about a second a request or better. On 10 November 2026
+SDF's public testnet endpoint answered in 8–9 s a request and the sample was refused at
+submission, while Gateway's public testnet endpoint (`https://rpc.testnet.stellar.gateway.fm`, no
+key needed) answered in 0.2–0.5 s and the whole flow, removal included, completed. A refusal for
+this reason says `rpc_too_slow` where the backend can tell.
+
 Set the minimum registry version to the operator's accepted rollback floor. Optional
 `stellarBinary`, `cargoHome`, `rustupHome`, and `buildCacheDir` fields select existing local
 toolchain paths; the cache directory also requires mode `0700`. Optional `nativeExecutable`
