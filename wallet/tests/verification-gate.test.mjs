@@ -5,7 +5,7 @@ const caseResults = (denials) => [
   ...Array.from({ length: denials }, () => ({ class: 'arg_equality', expectedPermit: false, permitted: false,
     agree: true, stateUnchanged: true, refusedBy: 'policy', refusalCode: 6 })),
 ];
-import { verificationGate } from '../overlay/files/src/policy-builder/client/verification.mjs';
+import { INSTALL_EVIDENCE_MAX_AGE_LEDGERS, installDeadline, verificationGate } from '../overlay/files/src/policy-builder/client/verification.mjs';
 const bindings = { specHash: 'a'.repeat(64), wasmHash: 'b'.repeat(64), bindingSetHash: 'c'.repeat(64) };
 function report() {
   return { ...bindings, runId: 'd'.repeat(64), complete: true, acceptance: { requiredRevertedDenials: 5, originalPermitted: true, meetsMinimum: true,
@@ -92,4 +92,15 @@ test('browser accepts equivalent summary fields independent of JSON key order', 
   value.acceptance.executedLayers = value.acceptance.executedLayers.map(l => ({ revertedDenials: l.revertedDenials,
     originalPermitted: l.originalPermitted, status: l.status, layer: l.layer }));
   assert.equal(verificationGate(value, bindings).acceptanceReady, true);
+});
+
+test('the install deadline is the earliest captured or live evidence ledger plus the age the installation accepts', () => {
+  const report = (captured, cases) => ({ layers: [{ layer: 'reference' }, { layer: 'account_wasm' },
+    { layer: 'captured_target', evidence: { observedLedger: captured } }, { layer: 'live_enforcement', evidence: { cases } }] });
+  assert.equal(INSTALL_EVIDENCE_MAX_AGE_LEDGERS, 360);
+  assert.equal(installDeadline(report(1000, [{ simulationLedger: 1200 }, { simulationLedger: 1201 }])), 1360);
+  assert.equal(installDeadline(report(1300, [{ simulationLedger: 1200 }, { simulationLedger: 1201 }])), 1560);
+  for (const bad of [report(1000, []), report(undefined, [{ simulationLedger: 1200 }]), report(1000, [{ simulationLedger: '1200' }]), null]) {
+    assert.equal(installDeadline(bad), null);
+  }
 });

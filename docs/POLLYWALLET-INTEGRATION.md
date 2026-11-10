@@ -697,6 +697,11 @@ cannot be repeated in the session, whatever the cause.
 | `account_changed` | The replay check found the account changed while released signatures were valid. |
 | `review_expired` | The prepared action is no longer available, in the backend or in this browser: it expired or was already used. |
 
+The installation section shows the last ledger at which this review's evidence is still accepted
+(`installDeadline`), from the captured and live evidence the browser already holds. Submission
+checks the evidence again after the backend's authority recheck, so the installation should start
+a little earlier.
+
 ## Report layers
 
 The four report layers are `reference`, `account_wasm`, `captured_target` and

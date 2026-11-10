@@ -91,9 +91,13 @@ try {
   await approve.waitFor();
   assert.equal(await approve.isEnabled(), true);
   await approve.click();
-  await page.getByText('Sample transfer confirmed. Record its hash below to generate the grant.', { exact: true }).waitFor();
+  await page.getByText('Sample transfer confirmed. Give this transaction hash to Claude, or record it in section 2 to generate the grant here.', { exact: true }).waitFor();
+  assert.equal(await page.locator('code').filter({ hasText: /^c{64}$/ }).count(), 1, 'the confirmed hash is shown with the sample');
+  await button('Copy transaction hash').waitFor();
   assert.equal(calls.filter((name) => name === 'sample-transfer').length, 1);
   assert.equal(await page.locator('#record-hash').inputValue(), 'c'.repeat(64));
+  const manual = page.locator('details').filter({ has: page.getByText('Record and generate here, without Claude', { exact: true }) });
+  assert.equal(await manual.getAttribute('open'), null, 'manual recording stays folded on the Claude path');
   assert.equal(await prepare.isDisabled(), true, 'a submitted sample is not offered again');
   console.log('Wallet page: attach keeps account creation, expired account preview shown again, account then sample order, spent passkey and review buttons, visible review window, expired review re-prepared without a passkey, single submission. Controlled dependencies; no chain/signing claim.');
 } finally { await browser.close(); }

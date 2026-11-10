@@ -3,6 +3,22 @@ import { dryRunAcceptance } from '#wallet-dry-run';
 const LAYERS = ['reference', 'account_wasm', 'captured_target', 'live_enforcement'];
 const HASH = /^[0-9a-f]{64}$/;
 const closed = () => ({ localReady: false, offlineAcceptanceReady: false, acceptanceReady: false });
+// Installation accepts captured and live evidence at most this many ledgers old (wallet/server/install.mjs).
+export const INSTALL_EVIDENCE_MAX_AGE_LEDGERS = 360;
+
+/**
+ * The last ledger at which installation still accepts this report's captured and live evidence, or
+ * null without both. The backend checks again at submission, after its authority recheck.
+ */
+export function installDeadline(report) {
+  const layers = Array.isArray(report?.layers) ? report.layers : [];
+  const captured = layers.find((layer) => layer?.layer === 'captured_target')?.evidence?.observedLedger;
+  const cases = layers.find((layer) => layer?.layer === 'live_enforcement')?.evidence?.cases;
+  if (!Array.isArray(cases) || !cases.length) return null;
+  const ledgers = [captured, ...cases.map((c) => c?.simulationLedger)];
+  return ledgers.every((ledger) => Number.isSafeInteger(ledger) && ledger > 0)
+    ? Math.min(...ledgers) + INSTALL_EVIDENCE_MAX_AGE_LEDGERS : null;
+}
 
 /** Installation preflight is never counted as behavioral live-enforcement evidence. */
 export function verificationGate(report, expected) {
