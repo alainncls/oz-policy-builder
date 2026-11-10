@@ -106,16 +106,27 @@ export function createWalletActions({ session, toolchain, network, native = null
   let accountAttempted = false;
   let sampleAccount = null;
   let sampleSubmitted = false;
-  async function sampleOwner() {
+  /** Independent reads at once; every one settles before the first failure is reported. */
+  async function settled(reads) {
+    const results = await Promise.allSettled(reads);
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed) throw failed.reason;
+    return results.map((result) => result.value);
+  }
+  async function sampleOwner(alongside = async () => null) {
     await network.assertTestnet();
-    const account = await network.requireInstance(sampleAccount.wallet.contractId, ACCOUNT_WASM);
-    const verifier = await network.requireInstance(sampleAccount.wallet.verifier, WEBAUTHN_WASM);
-    const observed = await network.view(sampleAccount.wallet.contractId, 'get_context_rule', [xdr.ScVal.scvU32(0)]);
+    // The account and verifier code and the owner rule are read at once, not one after another; the
+    // owner read must still come from at or after both code reads, so a lagging answer is asked again.
+    const ownerRule = () => network.view(sampleAccount.wallet.contractId, 'get_context_rule', [xdr.ScVal.scvU32(0)]);
+    const [account, verifier, early, also] = await settled([network.requireInstance(sampleAccount.wallet.contractId, ACCOUNT_WASM),
+      network.requireInstance(sampleAccount.wallet.verifier, WEBAUTHN_WASM), ownerRule(), alongside()]);
+    const after = Math.max(account.ledger, verifier.ledger);
+    const observed = early.ledger >= after ? early : await readAfter(ownerRule, after);
     if (observed.ledger < account.ledger || observed.ledger < verifier.ledger
       || observed.ledger - account.ledger > 12 || observed.ledger - verifier.ledger > 12) refuse();
     const ownerRuleXdr = observed.value.toXDR('base64');
     const approval = reviewSample({ ...sampleAccount, ownerRuleXdr });
-    return { ownerRuleXdr, approval, ownerReadLedger: observed.ledger };
+    return { ownerRuleXdr, approval, ownerReadLedger: observed.ledger, also };
   }
   // A complete review with one unused installation allowance (initially, or after verified replacement consent).
   const installable = (review) => native !== null && live !== null && review.verification?.complete === true
@@ -177,13 +188,10 @@ export function createWalletActions({ session, toolchain, network, native = null
       return { ...read, ledger: Math.min(read.instanceLedger, read.codeLedger) };
     }, anchor);
     // Every read settles before the action answers, so none outlives the request that started it.
-    const settled = await Promise.allSettled([
+    const [account, verifier, fresh, rule, also] = await settled([
       pinned(record.account, ACCOUNT_WASM), pinned(owner.wallet.verifier, WEBAUTHN_WASM),
       readAfter(() => ownerRead(owner.wallet, owner.ownerRuleId, ownerRuleXdr), anchor),
       readAfter(() => network.ruleReadback(record.account, record.ruleId), anchor), alongside()]);
-    const failed = settled.find((result) => result.status === 'rejected');
-    if (failed) throw failed.reason;
-    const [account, verifier, fresh, rule, also] = settled.map((result) => result.value);
     return { pins: { anchor, ledgers: [account.instanceLedger, account.codeLedger, verifier.instanceLedger, verifier.codeLedger] },
       fresh, rule, also };
   }
@@ -323,9 +331,12 @@ export function createWalletActions({ session, toolchain, network, native = null
       exact(input, ['id', 'signedAuthEntriesXdr']);
       return session.consume(input.id, 'sample', async (prepared) => {
         if (!sampleAccount || sampleSubmitted) refuse();
-        const observed = await sampleOwner();
+        // The fee payer is read with the owner check, after its network check; it must not predate the
+        // owner read, so a lagging answer is asked again.
+        const observed = await sampleOwner(() => network.sourceCapture());
         if (observed.approval.commitment !== prepared.approval.commitment) refuse();
-        const source = await network.sourceCapture();
+        const source = observed.also.ledger >= observed.ownerReadLedger ? observed.also
+          : await readAfter(() => network.sourceCapture(), observed.ownerReadLedger);
         const currentLedger = await network.latestLedger();
         if (source.ledger < observed.ownerReadLedger || currentLedger < source.ledger
           || currentLedger - observed.ownerReadLedger > 12 || currentLedger - source.ledger > 12) refuse();

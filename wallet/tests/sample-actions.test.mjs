@@ -101,6 +101,27 @@ test('real passkey proof submits the retained sample exactly once and yields a r
   await assert.rejects(() => f.actions['prepare-sample']({ wallet: f.wallet }), /refused/);
   assert.equal(f.calls.filter((x) => x === 'submit-sample').length, 1);
 });
+test('the sample reads its account, verifier and owner rule at once, and the fee payer with them', async () => {
+  const f = setup();
+  await create(f);
+  // Each call yields before answering, so calls made at the same time overlap; the log shows which did.
+  const log = [];
+  for (const name of ['requireInstance', 'view', 'sourceCapture']) {
+    const original = f.network[name];
+    f.network[name] = async (...args) => {
+      log.push(`${name} asked`);
+      await new Promise((resolve) => { setImmediate(resolve); });
+      log.push(`${name} answered`);
+      return original.apply(f.network, args);
+    };
+  }
+  const overlapped = (names) => names.every((name) => log.indexOf(`${name} asked`) < Math.min(...names.map((other) => log.indexOf(`${other} answered`))));
+  const prepared = await f.actions['prepare-sample']({ wallet: f.wallet });
+  assert.ok(overlapped(['requireInstance', 'view']), log.join(', '));
+  log.length = 0;
+  await f.actions['submit-sample']({ id: prepared.action.id, signedAuthEntriesXdr: signed(f, prepared) });
+  assert.ok(overlapped(['requireInstance', 'view', 'sourceCapture']), log.join(', '));
+});
 test('a new preparation invalidates the previous authorization token', async () => {
   const f = setup(); await create(f);
   const first = await f.actions['prepare-sample']({ wallet: f.wallet });
