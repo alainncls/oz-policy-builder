@@ -66,7 +66,7 @@ export class WalletSession {
 
   async consume(id, kind, operation) {
     const action = typeof id === 'string' && this.#pending.get(id);
-    if (!action || action.kind !== kind || action.expires <= this.#now()) throw unavailable();
+    if (!action || action.kind !== kind || action.expires <= this.#now()) throw Object.assign(unavailable(), { reason: 'review_expired' });
     if (this.#busy) throw new Error('wallet session busy');
     this.#pending.delete(id);
     this.#busy = true;

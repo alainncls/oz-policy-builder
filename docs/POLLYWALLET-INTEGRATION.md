@@ -133,8 +133,10 @@ Use **Connect Claude** on the Policy Builder page to pair the local agent sessio
 wallet. After the final permission card is confirmed, Claude can deliver an unverified draft
 without a separate install-skill command or copying proposal JSON. The wallet shows a
 notification; select **Review proposal from Claude** to enter the same independent regeneration
-and permission-comparison path described below. Delivery alone starts no RPC, build, deployment
-or signing, and retains the current review and grant recovery controls. This is a same-machine,
+and permission-comparison path described below. Its result appears in section 2, **The grant**;
+the folded **Record and generate here, without Claude** controls are not needed on this path.
+Delivery alone starts no RPC, build, deployment or signing, and retains the current review and
+grant recovery controls. This is a same-machine,
 local-stdio integration; remote hosted MCP has no access to the user's loopback wallet.
 Keep the page open from **Connect Claude** until you review the proposal: a reopened page
 shows the earlier connection and offers **Disconnect Claude**, but cannot review its draft.
@@ -143,7 +145,7 @@ disconnect semantics. Paste/file import remains the fallback.
 
 ## Importing an agent proposal
 
-After attaching the account, open **Import a grant proposal** under **Record and generate**.
+After attaching the account, open **Import a grant proposal** under **2. The grant**.
 Paste an `ozpb-grant-proposal/v1` document or choose a JSON file up to 16 KiB, then select
 **Import and verify proposal**. The accepted grant is one exact native XLM transfer from this
 account to a G-address recipient on testnet: one strict `any_of` delegated signer, an expiry
@@ -651,6 +653,13 @@ entries, then review again.
    bound to the wallet's owner rule and the installation's account, rule ID and transaction. The
    browser shows its own consent statement.
 
+Every read in steps 1–3 and the ledger read after the draft must fall within 12 ledgers of an
+anchor ledger read first. The code, owner-rule and rule reads are independent, so they are made
+at the same time after the anchor; one after another they could not fit the window on a slow RPC
+(testnet answered in 0.5 to 8.6 s a request on 10 November 2026). A read from a node behind the
+anchor is asked again. Reads that still miss the window are refused as `rpc_too_slow` before
+anything is released, and removal can be prepared again.
+
 `confirm-revoke` repeats those reads, checks the owner's signature and submits once, as
 installation does. A removal that was refused before anything was sent can be prepared again:
 
@@ -671,6 +680,22 @@ of these hold:
 A rule that still reads back, or any other answer, refuses success. Policy cleanup is reported
 separately, from the policy's installation marker: `not_installed`, `still_installed`, or
 `not_checked`. The pinned account removes a rule's policies on a best effort basis.
+
+## When the wallet refuses
+
+A refused action names at most one reason from a closed set, and nothing from the request or the
+error. The page explains it and says what to do; anything else is shown as a plain refusal. After a
+sample or installation submission was attempted, the browser passes on no reason: that attempt
+cannot be repeated in the session, whatever the cause.
+
+| Reason | Meaning |
+| --- | --- |
+| `busy` | The backend is still serving an earlier request; try again shortly. |
+| `rpc_too_slow` | The RPC answered too slowly for the reads to fit their ledger window; the backend stopped before submitting anything. |
+| `evidence_stale` | The captured or live evidence is older than the installation allows (360 ledgers); run the checks again. |
+| `signatures_still_valid` | Signatures the wallet released earlier, by a live check or an installation entry, have not expired yet; wait for their ledger. |
+| `account_changed` | The replay check found the account changed while released signatures were valid. |
+| `review_expired` | The prepared action is no longer available, in the backend or in this browser: it expired or was already used. |
 
 ## Report layers
 

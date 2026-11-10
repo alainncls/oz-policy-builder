@@ -205,7 +205,8 @@ test('install refused on stale evidence', async () => {
   const f = await installable();
   await verified(f);
   f.state.ledger = CAPTURE_LEDGER + INSTALL_EVIDENCE_MAX_AGE_LEDGERS + 1;
-  await assert.rejects(() => f.actions.assemble({ reviewId: f.review.reviewId }), /refused/);
+  await assert.rejects(() => f.actions.assemble({ reviewId: f.review.reviewId }),
+    (error) => /refused/.test(error.message) && error.reason === 'evidence_stale');
   assert.equal(assembles(f).length, 0);
   // Evidence from a ledger after the installation's own read: see install-gate.test.mjs.
   // Aging between assembly and submission is refused before the fee payer signs.
@@ -231,6 +232,49 @@ test('submit never resends a pending hash', async () => {
   assert.equal((await f.actions.status({})).capabilities.install, false);
 });
 
+/**
+ * A slow RPC: every network call answers `ledgers` ledgers after it was made, and calls made at the same
+ * time overlap, as they do against a real endpoint. Ledgers follow wall time from here on.
+ */
+function slowRpc(f, ledgers, msPerLedger = 40) {
+  const n = f.network, base = f.state.ledger, t0 = Date.now();
+  const tick = () => { f.state.ledger = Math.max(f.state.ledger, base + Math.floor((Date.now() - t0) / msPerLedger)); };
+  for (const name of ['assertTestnet', 'ledgerClock', 'latestLedger', 'requireInstance', 'view', 'ruleReadback',
+    'prepareRemoval', 'sourceCapture']) {
+    const original = n[name];
+    if (typeof original !== 'function') continue;
+    n[name] = async (...args) => {
+      await new Promise((resolve) => { setTimeout(resolve, ledgers * msPerLedger); });
+      tick();
+      return original.apply(n, args);
+    };
+  }
+}
+test('on a slow RPC, removal still reads its account, owner and rule inside the 12-ledger window', async () => {
+  const f = await installable();
+  const { submitted } = await installed(f);
+  // Each of these calls is two to four RPC requests; at a few seconds a request (testnet on 10 November
+  // 2026: 0.5 to 8.6 s) that is about three ledgers, and one after another they span more than 12.
+  slowRpc(f, 3);
+  const prepared = await f.actions['prepare-revoke']({ installationId: submitted.installation.installationId });
+  const envelope = xdr.TransactionEnvelope.fromXDR(prepared.assembly.envelope_xdr_base64, 'base64');
+  const signed = await f.signEntry(envelope.v1.tx.operations[0].body.invokeHostFunctionOp.auth[0].toXDR('base64'));
+  const confirmed = await f.actions['confirm-revoke']({ id: prepared.action.id, signedAuthEntriesXdr: signed });
+  assert.equal(confirmed.removal.status, 'removed');
+  assert.equal(confirmed.removal.ruleReadback, 'absent');
+});
+test('a removal whose reads miss their window is refused as too slow, releases nothing and can be prepared again', async () => {
+  const f = await installable();
+  const { submitted } = await installed(f);
+  const prepareRemoval = f.network.prepareRemoval;
+  let drafts = 0;
+  // The first draft answers 13 ledgers late: past the window that began at the anchor.
+  f.network.prepareRemoval = async (request) => { drafts++; if (drafts === 1) f.state.ledger += 13; return prepareRemoval(request); };
+  const prepare = () => f.actions['prepare-revoke']({ installationId: submitted.installation.installationId });
+  await assert.rejects(prepare, (error) => /refused/.test(error.message) && error.reason === 'rpc_too_slow');
+  assert.equal(drafts, 1, 'no hidden retry');
+  assert.equal((await prepare()).display.owner_signs.function, 'remove_context_rule');
+});
 test('revoke removes the installed rule only with the event, an absent readback and a separate cleanup report', async () => {
   const f = await installable();
   const { submitted } = await installed(f);

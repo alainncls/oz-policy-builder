@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import test from 'node:test';
 import { WalletSession } from '../server/session.mjs';
-import { createWalletServer } from '../server/http.mjs';
+import { REFUSAL_REASONS, createWalletServer } from '../server/http.mjs';
+import { REFUSAL_REASONS as CLIENT_REASONS } from '../overlay/files/src/policy-builder/client/client.mjs';
 
 const token = 'a'.repeat(64);
 async function fixture(t, actions = { status: async () => ({ ready: true }) }) {
@@ -61,12 +62,23 @@ test('backend errors and oversized output cannot reveal confidential diagnostics
   assert.ok(!response.body.includes('canary'));
 });
 
+test('a refusal names one closed reason the owner can act on, and nothing else from the error', async (t) => {
+  assert.deepEqual([...REFUSAL_REASONS].sort(), [...CLIENT_REASONS].sort(), 'the browser accepts exactly the reasons the backend names');
+  for (const [reason, named] of [['rpc_too_slow', true], ['evidence_stale', true], ['secret diagnostic canary', false], [undefined, false]]) {
+    const send = await fixture(t, { status: async () => { throw Object.assign(new Error('canary'), { reason }); } });
+    const response = await send();
+    assert.equal(response.status, 422);
+    assert.deepEqual(JSON.parse(response.body), { error: 'wallet action unavailable; refresh and review again', ...(named ? { reason } : {}) });
+  }
+});
 test('only one long operation occupies the local wallet backend at a time', async (t) => {
   let release; let started;
   const begun = new Promise((resolve) => { started = resolve; });
   const send = await fixture(t, { status: async () => { started(); await new Promise((resolve) => { release = resolve; }); return {}; } });
   const first = send(); await begun;
-  assert.equal((await send()).status, 409);
+  const busy = await send();
+  assert.equal(busy.status, 409);
+  assert.equal(JSON.parse(busy.body).reason, 'busy');
   release(); assert.equal((await first).status, 200);
 });
 

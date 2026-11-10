@@ -3,6 +3,30 @@ const ENDPOINTS = new Set(['status', 'prepare-account', 'confirm-account', 'prep
   'check-replay', 'assemble', 'submit', 'monitor-grant', 'prepare-replacement', 'confirm-replacement', 'prepare-revoke',
   'confirm-revoke']);
 const refused = () => new Error('wallet request refused; reconnect or try a fresh review');
+/** The closed set of reasons a refusal may name (the backend's REFUSAL_REASONS); any other is dropped. */
+export const REFUSAL_REASONS = new Set(['busy', 'rpc_too_slow', 'evidence_stale', 'signatures_still_valid', 'account_changed',
+  'review_expired']);
+/** A refusal's reason, from at most 4 KiB of its JSON body; nothing else in it is kept. */
+async function reasonOf(response) {
+  const reader = response.body?.getReader();
+  try {
+    if (!reader || response.headers.get('content-type')?.split(';')[0] !== 'application/json') return {};
+    const chunks = [];
+    let size = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 4096) return {};
+      chunks.push(value);
+    }
+    const buffer = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { buffer.set(chunk, offset); offset += chunk.byteLength; }
+    const reason = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer))?.reason;
+    return REFUSAL_REASONS.has(reason) ? { reason } : {};
+  } catch { return {}; } finally { reader?.cancel().catch(() => {}); }
+}
 
 /** Fragment credentials stay in memory and are removed before the first request. */
 export function takeSessionToken(location, history) {
@@ -41,6 +65,7 @@ export function createClient(token, options = {}) {
         method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body, signal: abort.signal, cache: 'no-store', credentials: 'omit', redirect: 'error',
       }), deadline]);
+      if (!response.ok && !response.redirected) throw Object.assign(refused(), await Promise.race([reasonOf(response), deadline]));
       if (!response.ok || response.redirected || response.headers.get('content-type')?.split(';')[0] !== 'application/json'
         || !response.body) throw refused();
       reader = response.body.getReader();
@@ -57,10 +82,10 @@ export function createClient(token, options = {}) {
       let offset = 0;
       for (const chunk of chunks) { buffer.set(chunk, offset); offset += chunk.byteLength; }
       return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer));
-    } catch {
+    } catch (error) {
       abort.abort();
       reader?.cancel().catch(() => {});
-      throw refused();
+      throw REFUSAL_REASONS.has(error?.reason) ? error : refused();
     } finally {
       clearTimeout(timer);
     }

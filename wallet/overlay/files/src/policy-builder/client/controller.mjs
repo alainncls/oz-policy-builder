@@ -1,7 +1,11 @@
+import { REFUSAL_REASONS } from './client.mjs';
 import { verificationGate } from './verification.mjs';
 
 const HASH = /^[0-9a-f]{64}$/;
 const refused = () => new Error('wallet action refused; refresh and review the exact grant');
+// A refusal may say why, in one word from the closed set the page explains (client.mjs REFUSAL_REASONS).
+const because = (reason) => Object.assign(refused(), { reason });
+const expired = () => because('review_expired');
 const copy = (value) => {
   const result = JSON.parse(JSON.stringify(value));
   const freeze = (part) => {
@@ -50,7 +54,7 @@ export class WalletController {
     if (this.#busy) throw refused();
     this.#busy = true; this.#set({ busy: true });
     try { return await operation(); }
-    catch { throw refused(); }
+    catch (error) { throw REFUSAL_REASONS.has(error?.reason) ? because(error.reason) : refused(); }
     finally { this.#busy = false; this.#set({ busy: false }); }
   }
   /** Both clocks: the monotonic one may stop while the computer sleeps, but ledgers keep closing. */
@@ -166,7 +170,8 @@ export class WalletController {
       if (this.#state.agent) throw refused();
       const preview = this.#state.accountPreview, open = this.#open('account');
       this.#set({ accountPreview: null });
-      if (!preview || !open) throw refused();
+      if (!preview) throw refused();
+      if (!open) throw expired();
       const result = await this.#request('confirm-account', { id: preview.action.id });
       if (result.wallet?.credentialId !== preview.summary.credentialId
         || result.wallet?.publicKey !== preview.summary.publicKey || !result.wallet?.contractId || !result.wallet?.verifier) throw refused();
@@ -204,7 +209,8 @@ export class WalletController {
       const open = this.#open('sample');
       this.#set({ samplePreview: null });
       this.#capability('sampleTransfer');
-      if (!wallet || !sample || !samplePreview || sampleAttempted || !open) throw refused();
+      if (!wallet || !sample || !samplePreview || sampleAttempted) throw refused();
+      if (!open) throw expired();
       const approval = this.#validators.reviewSample({ wallet, descriptor: sample, ownerRuleXdr: samplePreview.ownerRuleXdr });
       const checked = this.#validators.validateSampleAssembly({ approval, assembly: samplePreview.assembly,
         ownerRuleXdr: samplePreview.ownerRuleXdr, limits: samplePreview.limits });
@@ -212,12 +218,15 @@ export class WalletController {
       const signed = await this.#validators.validateSignedAuthorization({ approval, checked, signedAuthEntriesXdr,
         origin: this.#origin });
       // A review that ended while the passkey was open is not sent; its signature has not left this browser.
-      if (!this.#open('sample')) throw refused();
+      if (!this.#open('sample')) throw expired();
       // A lost response cannot establish whether submission happened. Require a fresh
       // session rather than exposing another signing or submission attempt.
       this.#set({ sampleAttempted: true });
-      const submitted = await this.#request('submit-sample', { id: samplePreview.action.id,
-        signedAuthEntriesXdr: signed.signedAuthEntriesXdr });
+      // Attempted: whatever the backend says, this session cannot try again, so no reason is passed on.
+      let submitted;
+      try {
+        submitted = await this.#request('submit-sample', { id: samplePreview.action.id, signedAuthEntriesXdr: signed.signedAuthEntriesXdr });
+      } catch { throw refused(); }
       if (!HASH.test(submitted?.transactionHash) || submitted.receipt?.hash !== submitted.transactionHash) throw refused();
       this.#set({ sampleTransactionHash: submitted.transactionHash, receipt: submitted.receipt });
     });
@@ -367,7 +376,8 @@ export class WalletController {
     return this.#act(async () => {
       const preview = this.#state.deployPreview, open = this.#open('deploy');
       this.#set({ deployPreview: null });
-      if (!preview || !open) throw refused();
+      if (!preview) throw refused();
+      if (!open) throw expired();
       const deployment = await this.#request('confirm-deploy', { id: preview.action.id });
       if (!deployment.deploymentId || !deployment.policyAddress || !HASH.test(deployment.bindingSetHash)
         || deployment.wasmHash !== this.#state.artifact.wasmHash) throw refused();
@@ -462,7 +472,8 @@ export class WalletController {
       const open = this.#open('live');
       this.#set({ livePreview: null, replay: null });
       this.#capability('liveCheck');
-      if (!review || !livePreview || !open) throw refused();
+      if (!review || !livePreview) throw refused();
+      if (!open) throw expired();
       const started = this.#started();
       const consent = await this.#request('consent-live', { id: livePreview.action.id, statementSha256: livePreview.statementSha256 });
       if (!HASH.test(consent?.action?.id ?? '') || consent.signatureExpirationLedger !== livePreview.display.signature_expiration_ledger) throw refused();
@@ -473,7 +484,7 @@ export class WalletController {
       const signedAuthEntriesXdr = await this.#sign({ approval: review.approval, checked });
       const owner = await this.#validators.validateLiveOwnerSignature({ approval: review.approval, checked, signedAuthEntriesXdr,
         origin: this.#origin });
-      if (!this.#within(run)) throw refused();
+      if (!this.#within(run)) throw expired();
       const result = await this.#request('run-live', { id: consent.action.id, signedAuthEntriesXdr: [owner.signedEntryXdr] });
       this.#set({ review: { ...review, verification: this.#verification(result) } });
     });
@@ -561,9 +572,10 @@ export class WalletController {
         submitted = await this.#request('submit', { id: installPreview.action.id, signedAuthEntriesXdr: signed.signedAuthEntriesXdr });
       } catch (error) {
         // A confirmed transaction the backend could not verify, or whose response was lost, is still
-        // listed there: the status read adopts it, so that it can be seen and removed.
+        // listed there: the status read adopts it, so that it can be seen and removed. The attempt
+        // cannot be repeated, so its reason is not passed on.
         await this.#statusWhenFree();
-        throw error;
+        throw refused();
       }
       await this.#status().catch(() => {});
       const installation = submitted?.installation;
@@ -579,7 +591,7 @@ export class WalletController {
    */
   async #expiredInstall() {
     await this.#status().catch(() => {});
-    throw refused();
+    throw expired();
   }
   /** The one confirmed installation the backend lists for this wallet, not removed, or null. */
   #confirmed(ruleId) {
@@ -630,7 +642,8 @@ export class WalletController {
       const { replacementPreview, installation, removal } = this.#state;
       const open = this.#open('replacement');
       this.#set({ replacementPreview: null });
-      if (!replacementPreview || !open) throw refused();
+      if (!replacementPreview) throw refused();
+      if (!open) throw expired();
       const display = this.#validators.replacementConsent({ installation, removal });
       if (JSON.stringify(display) !== JSON.stringify(replacementPreview.display)) throw refused();
       const actionId = replacementPreview.action.id;
@@ -691,7 +704,8 @@ export class WalletController {
       const { installation, installOwner, revokePreview, revokeAttempted, status } = this.#state;
       const open = this.#open('revoke');
       this.#set({ revokePreview: null });
-      if (!installation || !installOwner || !revokePreview || revokeAttempted || !open) throw refused();
+      if (!installation || !installOwner || !revokePreview || revokeAttempted) throw refused();
+      if (!open) throw expired();
       const approval = this.#validators.reviewRemoval({ ...installOwner, configurationChange: revokePreview.configurationChange ?? null,
         installation: { account: installation.account, ruleId: installation.ruleId, transactionHash: installation.transactionHash } });
       const checked = this.#validators.validateRemovalAssembly({ approval, assembly: revokePreview.assembly,
@@ -700,7 +714,7 @@ export class WalletController {
         !== JSON.stringify(revokePreview.display)) throw refused();
       const signedAuthEntriesXdr = await this.#sign({ approval, checked });
       const signed = await this.#validators.validateSignedAuthorization({ approval, checked, signedAuthEntriesXdr, origin: this.#origin });
-      if (!this.#open('revoke')) throw refused();
+      if (!this.#open('revoke')) throw expired();
       this.#set({ revokeAttempted: true });
       let confirmed;
       try {
@@ -710,7 +724,8 @@ export class WalletController {
         const refreshed = (await this.#statusWhenFree()) !== null;
         const listed = (this.#state.status?.installations ?? []).find((item) => item?.installationId === installation.installationId);
         if (refreshed && listed && listed.removal === null && listed.removalAttempted === false) this.#set({ revokeAttempted: false });
-        throw error;
+        // Its reason is passed on only when the removal can be prepared again.
+        throw this.#state.revokeAttempted ? refused() : error;
       }
       await this.#status().catch(() => {});
       const removal = confirmed?.removal;

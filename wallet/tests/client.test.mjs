@@ -44,6 +44,20 @@ test('redacts backend errors, limits response bytes and rejects redirects/conten
   }
 });
 
+test('a refusal keeps only a listed reason from the backend, never its text', async () => {
+  for (const [body, status, reason] of [[{ error: 'x', reason: 'rpc_too_slow' }, 422, 'rpc_too_slow'], [{ reason: 'busy' }, 409, 'busy'],
+    [{ error: 'x', reason: 'made up' }, 422, undefined], [{ error: 'x' }, 422, undefined]]) {
+    const request = createClient(token, { fetch: async () => Response.json(body, { status }) });
+    await assert.rejects(request('status', {}), (error) =>
+      error.message === 'wallet request refused; reconnect or try a fresh review' && error.reason === reason);
+  }
+  // A large or non-JSON error body is not read past 4 KiB and names no reason.
+  for (const response of [Response.json({ reason: 'busy', padding: 'x'.repeat(8192) }, { status: 422 }),
+    new Response('reason=busy', { status: 409, headers: { 'content-type': 'text/plain' } })]) {
+    const request = createClient(token, { fetch: async () => response });
+    await assert.rejects(request('status', {}), (error) => error.reason === undefined);
+  }
+});
 test('aborts a response body that stalls beyond the total request deadline', async () => {
   let cancelled = false;
   const body = new ReadableStream({ cancel() { cancelled = true; } });

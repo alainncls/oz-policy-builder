@@ -282,6 +282,8 @@ export async function replayStatus({ network, records }) {
 export async function requireNoReplay({ network, records }) {
   if (!records?.length) refuse();
   const status = await replayStatus({ network, records });
+  if (status.status === 'waiting') throw Object.assign(new Error('wallet replay check refused'), { reason: 'signatures_still_valid' });
+  if (status.status === 'changed') throw Object.assign(new Error('wallet replay check refused'), { reason: 'account_changed' });
   if (status.status !== 'unchanged') refuse();
   return status;
 }

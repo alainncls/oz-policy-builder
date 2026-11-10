@@ -356,6 +356,13 @@ test('the ledger clock fails closed on a close time that is not a whole number o
   }
 });
 
+test('a new live check while earlier signatures are still valid is refused, saying so', async () => {
+  const f = await liveReviewed();
+  const { input } = await consented(f);
+  await f.actions['run-live'](input);
+  await assert.rejects(() => f.actions['prepare-live']({ reviewId: f.review.reviewId, capabilityId: f.delegate.capabilityId }),
+    (error) => /refused/.test(error.message) && error.reason === 'signatures_still_valid');
+});
 test('a new live check waits on a trusted clock while earlier signatures may be valid', async () => {
   const f = await liveReviewed();
   const { input } = await consented(f);

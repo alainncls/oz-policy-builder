@@ -335,7 +335,7 @@ test('an expired sample review asks no passkey and can be prepared again', async
   await f.controller.prepareSample();
   assert.equal(f.controller.state.windows.sample, started + OWNER_READ_WINDOW_MS);
   f.clock.now += OWNER_READ_WINDOW_MS;
-  await assert.rejects(f.controller.approveSample(), /wallet action refused/);
+  await assert.rejects(f.controller.approveSample(), (error) => /wallet action refused/.test(error.message) && error.reason === 'review_expired');
   assert.equal(f.calls.some(([name]) => name === 'sign' || name === 'submit-sample'), false);
   assert.equal(f.controller.state.samplePreview, null);
   assert.equal(f.controller.state.sampleAttempted, false);
@@ -371,6 +371,22 @@ test('a review window counts from before the request and closes on either clock'
   await assert.rejects(f.controller.approveSample(), /wallet action refused/, 'ledgers close while the monotonic clock sleeps');
   assert.equal(f.calls.some(([name]) => name === 'sign' || name === 'submit-sample'), false);
   assert.equal(f.controller.state.sampleAttempted, false);
+});
+test('a refusal keeps the reason the backend named, and only a plain word', async () => {
+  for (const [reason, kept] of [['rpc_too_slow', 'rpc_too_slow'], ['Not A Reason!', undefined]]) {
+    const f = fixture();
+    await prepared(f);
+    f.replies.assemble = Object.assign(new Error('refused'), { reason });
+    await assert.rejects(f.controller.prepareInstall(), (error) => /wallet action refused/.test(error.message) && error.reason === kept);
+  }
+});
+test('after a sample submission was attempted, no reason is passed on: it cannot be tried again', async () => {
+  const f = sampleFixture();
+  await created(f);
+  await f.controller.prepareSample();
+  f.replies['submit-sample'] = Object.assign(new Error('refused'), { reason: 'rpc_too_slow' });
+  await assert.rejects(f.controller.approveSample(), (error) => /wallet action refused/.test(error.message) && error.reason === undefined);
+  assert.equal(f.controller.state.sampleAttempted, true);
 });
 test('a review without a valid lifetime is refused instead of staying open', async () => {
   for (const expires of [undefined, 0, 121, 1.5]) {

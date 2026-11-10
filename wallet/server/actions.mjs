@@ -20,6 +20,10 @@ import { FRESHNESS_LEDGERS, capturedCall, capturedJobText, checkTargetCapture, r
 import { LIVE_ORIGIN, clockedLedger, consentWindow, ownerEntry, prepareLive, replayRecord, replayStatus, requireNoReplay, runLive } from './live-check.mjs';
 
 const refuse = () => { throw new Error('wallet action refused; refresh and review again'); };
+/** Reads that did not fit their ledger window: the RPC answered too slowly, or from a lagging node. */
+class SlowReads extends Error {
+  constructor() { super('wallet action refused; refresh and review again'); this.reason = 'rpc_too_slow'; }
+}
 const HASH = /^[a-f0-9]{64}$/;
 const id = () => randomBytes(32).toString('hex');
 const get = (map, key) => { if (typeof key !== 'string' || !HASH.test(key) || !map.has(key)) refuse(); return map.get(key); };
@@ -158,18 +162,37 @@ export function createWalletActions({ session, toolchain, network, native = null
   }
   const readbackAfter = (account, ruleId, ledger) => readAfter(() => network.ruleReadback(account, ruleId), ledger);
   const markerAfter = (account, policy, ruleId, ledger) => readAfter(() => network.liveState({ account, policy, ruleId }), ledger);
-  async function removalPins(record, owner) {
+  /**
+   * A removal's reads after one anchor ledger: the account's and verifier's pinned code, the owner
+   * rule and the rule being removed. They are independent, so they are asked at once: one after
+   * another, a slow RPC (seconds a request) cannot fit them in the 12-ledger window removal checks.
+   * Each must still come from a node at or past the anchor; a lagging node is asked again. Reads
+   * that still miss the window refuse as `rpc_too_slow`; the owner can prepare again.
+   */
+  async function removalReads(record, owner, ownerRuleXdr, alongside = async () => null) {
     const anchor = await clockedLedger(network);
-    const account = await network.requireInstance(record.account, ACCOUNT_WASM);
-    const verifier = await network.requireInstance(owner.wallet.verifier, WEBAUTHN_WASM);
-    if (account.contractId !== record.account || account.wasmHash !== ACCOUNT_WASM
-      || verifier.contractId !== owner.wallet.verifier || verifier.wasmHash !== WEBAUTHN_WASM) refuse();
-    return { anchor, ledgers: [account.instanceLedger, account.codeLedger, verifier.instanceLedger, verifier.codeLedger] };
+    const pinned = (contractId, wasmHash) => readAfter(async () => {
+      const read = await network.requireInstance(contractId, wasmHash);
+      if (read.contractId !== contractId || read.wasmHash !== wasmHash) refuse();
+      return { ...read, ledger: Math.min(read.instanceLedger, read.codeLedger) };
+    }, anchor);
+    // Every read settles before the action answers, so none outlives the request that started it.
+    const settled = await Promise.allSettled([
+      pinned(record.account, ACCOUNT_WASM), pinned(owner.wallet.verifier, WEBAUTHN_WASM),
+      readAfter(() => ownerRead(owner.wallet, owner.ownerRuleId, ownerRuleXdr), anchor),
+      readAfter(() => network.ruleReadback(record.account, record.ruleId), anchor), alongside()]);
+    const failed = settled.find((result) => result.status === 'rejected');
+    if (failed) throw failed.reason;
+    const [account, verifier, fresh, rule, also] = settled.map((result) => result.value);
+    return { pins: { anchor, ledgers: [account.instanceLedger, account.codeLedger, verifier.instanceLedger, verifier.codeLedger] },
+      fresh, rule, also };
   }
   function removalReadWindow(pins, owner, rule, currentLedger, installedLedger) {
     if (!Number.isSafeInteger(currentLedger) || currentLedger < pins.anchor || currentLedger - pins.anchor > 12
       || [...pins.ledgers, owner.ledger, rule.ledger].some((ledger) => !Number.isSafeInteger(ledger)
-        || ledger < Math.max(installedLedger, pins.anchor) || ledger > currentLedger || currentLedger - ledger > 12)) refuse();
+        || ledger < Math.max(installedLedger, pins.anchor) || ledger > currentLedger || currentLedger - ledger > 12)) {
+      throw new SlowReads();
+    }
   }
   async function replacementState(held) {
     await network.assertTestnet();
@@ -544,7 +567,9 @@ export function createWalletActions({ session, toolchain, network, native = null
       session.invalidate('live');
       session.invalidate('live_sign');
       // Earlier signatures still valid: a new check would add more before the replay check can run.
-      if (liveRecords.length && (await clockedLedger(network)) <= Math.max(...liveRecords.map((r) => r.signatureExpirationLedger))) refuse();
+      if (liveRecords.length && (await clockedLedger(network)) <= Math.max(...liveRecords.map((r) => r.signatureExpirationLedger))) {
+        throw Object.assign(new Error('wallet action refused; refresh and review again'), { reason: 'signatures_still_valid' });
+      }
       const result = await prepareLive({ network, helper: live.helper, approval: review.approval, spec: artifact.spec,
         policyAddress: deployment.response.policyAddress, policyCodeHash: artifact.wasmHash, nextRuleId: review.nextRuleId });
       if (result.layer) {
@@ -624,8 +649,9 @@ export function createWalletActions({ session, toolchain, network, native = null
       await installPreconditions(review, deployment, artifact);
       const assembly = await toolchain.authority('assemble-install-transaction', { intent_request: deployment.request,
         fee_payer: network.payerAddress, max_fee_stroops: MAX_FEE_STROOPS, validity_ledgers: INSTALL_VALIDITY_LEDGERS });
-      const owner = await ownerRead(review.approval.wallet, review.approval.ownerRuleId, review.approval.ownerRuleXdr);
-      const source = await network.sourceCapture();
+      // Both after the CLI's observation, and independent: asked at once, then the latest ledger.
+      const [owner, source] = await Promise.all([
+        ownerRead(review.approval.wallet, review.approval.ownerRuleId, review.approval.ownerRuleXdr), network.sourceCapture()]);
       const currentLedger = await network.latestLedger();
       const observed = assembly?.intent?.authority?.verdict?.observed_ledger;
       if (!Number.isSafeInteger(observed) || owner.ledger < observed || owner.ledger - observed > 12 || source.ledger < observed
@@ -673,8 +699,8 @@ export function createWalletActions({ session, toolchain, network, native = null
         // The CLI recheck first: it builds and scans, so ledgers close while it runs. The reads it is
         // compared with come after it, within 12 ledgers of its observation.
         const fresh = await authorityRecheck(review, deployment, approval.ownerRuleXdr);
-        const owner = await ownerRead(approval.wallet, approval.ownerRuleId, approval.ownerRuleXdr);
-        const source = await network.sourceCapture();
+        const [owner, source] = await Promise.all([ownerRead(approval.wallet, approval.ownerRuleId, approval.ownerRuleXdr),
+          network.sourceCapture()]);
         const currentLedger = await network.latestLedger();
         if (source.sourceSequence !== String(sourceOf(held.checked.envelopeXdr))
           || currentLedger < fresh.observedLedger || currentLedger - fresh.observedLedger > 12
@@ -776,10 +802,8 @@ export function createWalletActions({ session, toolchain, network, native = null
       const { record, owner } = held;
       if (held.removalAttempted || !Number.isSafeInteger(record.ruleId)) refuse();
       session.invalidate('revoke');
-      await network.assertTestnet();
-      const pins = await removalPins(record, owner);
-      const fresh = await ownerRead(owner.wallet, owner.ownerRuleId, owner.ownerRuleXdr);
-      const rule = await network.ruleReadback(record.account, record.ruleId);
+      // The anchor's ledger clock checks the network first.
+      const { pins, fresh, rule } = await removalReads(record, owner, owner.ownerRuleXdr);
       if (rule.status !== 'present') refuse();
       let configurationChange = null;
       if (record.ruleXdr === null) {
@@ -812,11 +836,10 @@ export function createWalletActions({ session, toolchain, network, native = null
         const held = get(installations, installationId);
         if (held.removalAttempted || network.canSubmit !== true) refuse();
         const { record, owner } = held;
-        await network.assertTestnet();
-        const pins = await removalPins(record, owner);
-        const fresh = await ownerRead(owner.wallet, owner.ownerRuleId, approval.ownerRuleXdr);
-        const rule = await network.ruleReadback(record.account, record.ruleId);
-        const source = await network.sourceCapture();
+        // The fee payer's sequence is only compared with the signed envelope: read with the others,
+        // after the anchor's network check.
+        const { pins, fresh, rule, also: source } = await removalReads(record, owner, approval.ownerRuleXdr,
+          () => network.sourceCapture());
         const currentLedger = await network.latestLedger();
         removalReadWindow(pins, fresh, rule, currentLedger, record.ledger);
         if (rule.status !== 'present' || rule.xdr !== ruleXdr || source.sourceSequence !== String(sourceOf(checked.envelopeXdr))

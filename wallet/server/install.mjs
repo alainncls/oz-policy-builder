@@ -14,6 +14,8 @@ export const INSTALL_EVIDENCE_MAX_AGE_LEDGERS = 360;
 const LAYERS = ['reference', 'account_wasm', 'captured_target', 'live_enforcement'];
 const HASH = /^[0-9a-f]{64}$/;
 const refuse = () => { throw new Error('wallet installation refused; refresh and review again'); };
+/** Checks older than the installation allows: run them again. */
+const stale = () => Object.assign(new Error('wallet installation refused; refresh and review again'), { reason: 'evidence_stale' });
 const integer = (n, min = 1, max = 0xffffffff) => Number.isSafeInteger(n) && n >= min && n <= max;
 const bytes = (value) => Buffer.from(value.toXDR());
 const same = (a, b) => bytes(a).equals(bytes(b));
@@ -52,9 +54,10 @@ export function installGate({ review, deployment, artifact, currentLedger }) {
       || l?.account !== account || l.policy !== policy || l.policyCodeHash !== code || l.expectedRuleId !== ruleId
       || l.owner?.human_approval_attested !== false || !Array.isArray(l.cases) || l.cases.length !== 2) refuse();
     const observed = [captured.evidence.observedLedger, ...l.cases.map((c) => c.simulationLedger)];
-    if (observed.some((ledger) => !integer(ledger) || ledger > currentLedger || currentLedger - ledger > INSTALL_EVIDENCE_MAX_AGE_LEDGERS)) refuse();
+    if (observed.some((ledger) => !integer(ledger) || ledger > currentLedger)) refuse();
+    if (observed.some((ledger) => currentLedger - ledger > INSTALL_EVIDENCE_MAX_AGE_LEDGERS)) throw stale();
     return { capturedLedger: observed[0], liveLedgers: observed.slice(1), currentLedger };
-  } catch { return refuse(); }
+  } catch (error) { if (error?.reason === 'evidence_stale') throw error; return refuse(); }
 }
 
 /** A ScMap's entries by symbol key, refused unless the keys are exactly `names`, in order. */

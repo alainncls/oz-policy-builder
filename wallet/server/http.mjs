@@ -1,5 +1,8 @@
 import { createServer } from 'node:http';
 import { AgentRefusal } from './agent-handoff.mjs';
+/** Why a wallet action was refused, when the backend can say: shown to the owner as plain text. */
+export const REFUSAL_REASONS = new Set(['busy', 'rpc_too_slow', 'evidence_stale', 'signatures_still_valid', 'account_changed',
+  'review_expired']);
 
 const BODY_BYTES = 64 * 1024;
 const RESPONSE_BYTES = 8 * 1024 * 1024;
@@ -101,7 +104,7 @@ export function createWalletServer({ session, actions, handoff = null }) {
       || !/^application\/json(?:;\s*charset=utf-8)?$/i.test(request.headers['content-type'])) {
       request.resume(); reply(400, { error: 'invalid wallet request' }); return;
     }
-    if (busy) { request.resume(); reply(409, { error: 'wallet session busy' }); return; }
+    if (busy) { request.resume(); reply(409, { error: 'wallet session busy', reason: 'busy' }); return; }
     busy = true;
     // A client that disconnects before its reply aborts the action: its child processes are
     // killed and it settles, so `busy` is released instead of waiting for a worker deadline.
@@ -112,7 +115,11 @@ export function createWalletServer({ session, actions, handoff = null }) {
       try { body = parseBody(await bodyBytes(request)); }
       catch { reply(400, { error: 'invalid wallet request' }); return; }
       try { reply(200, await routes[name](body, { signal: disconnected.signal })); }
-      catch { reply(422, { error: 'wallet action unavailable; refresh and review again' }); }
+      // A refusal names at most one of a closed set of reasons; nothing from the request or the error.
+      catch (error) {
+        reply(422, { error: 'wallet action unavailable; refresh and review again',
+          ...(REFUSAL_REASONS.has(error?.reason) ? { reason: error.reason } : {}) });
+      }
     } finally { busy = false; }
   });
   server.headersTimeout = 10_000;
