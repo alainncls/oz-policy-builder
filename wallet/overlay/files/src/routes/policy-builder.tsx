@@ -42,6 +42,16 @@ const xlm = (value: unknown) => {
     ? `${amount / 10_000_000} testnet XLM` : "Unavailable";
 };
 
+/** Time left in a prepared review, on the controller's monotonic clock; at its end, what to do instead. */
+function ReviewWindow({ until, now, expired = "Prepare it again." }: { until: number | undefined; now: number; expired?: string }) {
+  if (typeof until !== "number") return null;
+  const left = Math.ceil((until - now) / 1000);
+  return left > 0
+    ? <p role="timer" className={`text-sm font-semibold ${left <= 15 ? "text-amber-200" : "text-cyan-200"}`}>
+        {left} seconds left to approve this review.</p>
+    : <p role="status" className="text-sm font-semibold text-amber-200">This review expired before approval. {expired}</p>;
+}
+
 function GrantSummary({ spec }: { spec: unknown }) {
   if (!spec) return null;
   const grant = object(spec);
@@ -203,6 +213,10 @@ function PolicyBuilder() {
   const [state, setState] = useState<WalletState | null>(null);
   const [message, setMessage] = useState("Open this page using the local wallet launcher's session URL.");
   const [creating, setCreating] = useState(false);
+  // The public half of the passkey this page created, so an expired account preview can be shown again.
+  const [credential, setCredential] = useState<{ credentialId: string; publicKey: string } | null>(null);
+  // The backend creates one account per session; attaching a locator does not use it up.
+  const [accountCreated, setAccountCreated] = useState(false);
   const [walletJson, setWalletJson] = useState("");
   const [transactionHash, setTransactionHash] = useState("");
   const [proposalText, setProposalText] = useState("");
@@ -260,7 +274,22 @@ function PolicyBuilder() {
   useEffect(() => {
     if (state?.delegate?.address) setDelegateAddress(state.delegate.address);
   }, [state?.delegate?.address]);
+  useEffect(() => {
+    if (state?.sample) setAccountCreated(true);
+  }, [state?.sample]);
   const busy = creating || state?.busy || !state?.status;
+  // A prepared review is open until its window ends; the page re-reads the clock while any review is shown.
+  const windows = state?.windows ?? {};
+  const reviewing = Boolean(state?.accountPreview || state?.samplePreview || state?.deployPreview || state?.livePreview
+    || state?.installPreview || state?.revokePreview || state?.replacementPreview);
+  const [now, setNow] = useState(() => performance.now());
+  useEffect(() => {
+    if (!reviewing) return;
+    setNow(performance.now());
+    const timer = window.setInterval(() => setNow(performance.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [reviewing]);
+  const open = (kind: string, preview: unknown) => Boolean(preview) && now < (windows[kind] ?? -Infinity);
   const run = async (action: (value: WalletController) => Promise<void> | void) => {
     if (!controller.current || busy) return;
     setMessage("Working…");
@@ -273,9 +302,10 @@ function PolicyBuilder() {
     setCreating(true);
     setMessage("Create the owner passkey. Account deployment requires a separate confirmation.");
     try {
-      const credential = await createPasskey("Pollywallet Policy Builder", "Policy Builder owner");
-      await controller.current.prepareAccount({ credentialId: credential.credentialId,
-        publicKey: Buffer.from(credential.publicKey).toString("hex") });
+      const passkey = await createPasskey("Pollywallet Policy Builder", "Policy Builder owner");
+      const created = { credentialId: passkey.credentialId, publicKey: Buffer.from(passkey.publicKey).toString("hex") };
+      setCredential(created);
+      await controller.current.prepareAccount(created);
       setMessage("Passkey created. Review the exact account deployment below.");
     } catch { setMessage("Passkey creation or account preparation was refused."); }
     finally { creatingRef.current = false; setCreating(false); }
@@ -306,15 +336,23 @@ function PolicyBuilder() {
         <h2 id="wallet-heading" className="text-xl font-semibold">1. Choose the recognized account</h2>
         <p className="text-sm text-slate-300">This integration requires the reviewed account and verifier code shown below.
           Existing wallets with different code are refused.</p>
-        <button className={button} disabled={busy || agentActive} onClick={() => void create()}>Create owner passkey and preview account</button>
+        <button className={button} disabled={busy || agentActive || !!state?.accountPreview || accountCreated}
+          onClick={() => void create()}>Create owner passkey and preview account</button>
         {state?.accountPreview && <p className="rounded-lg border border-cyan-700 p-3 text-sm">
           The new account receives {xlm(object(state.accountPreview.summary).sampleFundingStroops)} for the sample transaction.
           {" "}Maximum total deployment and funding fees: {xlm(object(state.accountPreview.summary).maxTotalFeeStroops)}.
           {" "}These funds come from the local testnet fee payer.
         </p>}
         <Evidence title="Account deployment preview" value={state?.accountPreview} open />
-        {state?.accountPreview && <button className={button} disabled={busy || agentActive}
-          onClick={() => void run((value) => value.confirmAccount())}>Confirm testnet account deployment</button>}
+        {state?.accountPreview && <>
+          <ReviewWindow until={windows.account} now={now} expired="Preview the account again; it reuses the passkey you created." />
+          <div className="flex flex-wrap gap-3">
+            <button className={button} disabled={busy || agentActive || !open("account", state.accountPreview)}
+              onClick={() => void run((value) => value.confirmAccount())}>Confirm testnet account deployment</button>
+            {!open("account", state.accountPreview) && credential && <button className={button} disabled={busy || agentActive}
+              onClick={() => void run((value) => value.prepareAccount(credential))}>Preview the account again</button>}
+          </div>
+        </>}
         <details><summary className="cursor-pointer">Attach an existing recognized wallet</summary>
           <label className="mt-3 block text-sm" htmlFor="wallet-locator">Public wallet locator JSON: contractId, credentialId, publicKey, verifier</label>
           <textarea id="wallet-locator" className={input} rows={4} value={walletJson}
@@ -322,6 +360,35 @@ function PolicyBuilder() {
           <button className={button} disabled={busy || agentActive || !walletJson} onClick={() => void attach()}>Use this wallet locator</button>
         </details>
         <Evidence title="Current public wallet locator — retain it to reconnect" value={state?.wallet} open />
+        {state?.sample && <div className="space-y-3 rounded-lg border border-cyan-700 bg-cyan-950/20 p-4">
+          <h3 className="font-semibold">Create a sample transaction with this new account</h3>
+          <p className="text-sm">Transfer exactly 0.1 testnet XLM from the account to the local testnet fee payer.
+            The fee payer pays the transaction fee, up to 1 testnet XLM. Your owner passkey approves only this transfer.</p>
+          <dl className="space-y-2 break-all text-sm">
+            <div><dt className="text-slate-400">From</dt><dd>{state.wallet?.contractId}</dd></div>
+            <div><dt className="text-slate-400">Recipient and fee payer</dt><dd>{state.sample.recipient}</dd></div>
+          </dl>
+          <button className={button} disabled={busy || state.sampleAttempted || open("sample", state.samplePreview)
+            || !state.status?.capabilities.sampleTransfer}
+            onClick={() => void run((value) => value.prepareSample())}>Prepare 0.1 XLM sample transfer</button>
+          {state.samplePreview && <>
+            <p className="text-sm">Prepared fee: {xlm(object(state.samplePreview.assembly).fee_stroops)}.</p>
+            <ReviewWindow until={windows.sample} now={now} />
+            <div className="flex flex-wrap gap-3">
+              <button className={button} disabled={busy || !open("sample", state.samplePreview)}
+                onClick={() => void run((value) => value.approveSample())}>Approve 0.1 XLM transfer with owner passkey</button>
+              <button className={button} disabled={busy}
+                onClick={() => void run((value) => value.cancelSample())}>Cancel sample review</button>
+            </div>
+            <Evidence title="Exact unsigned sample transaction and owner evidence" value={state.samplePreview} />
+          </>}
+          {state.sampleAttempted && !state.sampleTransactionHash && <p className="text-sm text-amber-200">
+            A submission was attempted. Further sample attempts are disabled. Check the backend journal if confirmation is missing.
+          </p>}
+          {state.sampleTransactionHash && <p className="text-sm text-cyan-300">
+            Sample transfer confirmed. Record its hash below to generate the grant.
+          </p>}
+        </div>}
       </section>
       <section className={panel} aria-labelledby="agent-heading">
         <h2 id="agent-heading" className="text-xl font-semibold">Connect Claude</h2>
@@ -395,34 +462,6 @@ function PolicyBuilder() {
           {!state.proposalReview.hashesMatch && <p>Specification hashes include acquisition details and may differ even when permissions match.
             The account, calls, signer requirements, expiry, cap and policy kinds were compared separately and match.</p>}
         </div>}
-        {state?.sample && <div className="space-y-3 rounded-lg border border-cyan-700 bg-cyan-950/20 p-4">
-          <h3 className="font-semibold">Create a sample transaction with this new account</h3>
-          <p className="text-sm">Transfer exactly 0.1 testnet XLM from the account to the local testnet fee payer.
-            The fee payer pays the transaction fee, up to 1 testnet XLM. Your owner passkey approves only this transfer.</p>
-          <dl className="space-y-2 break-all text-sm">
-            <div><dt className="text-slate-400">From</dt><dd>{state.wallet?.contractId}</dd></div>
-            <div><dt className="text-slate-400">Recipient and fee payer</dt><dd>{state.sample.recipient}</dd></div>
-          </dl>
-          <button className={button} disabled={busy || state.sampleAttempted || !state.status?.capabilities.sampleTransfer}
-            onClick={() => void run((value) => value.prepareSample())}>Prepare 0.1 XLM sample transfer</button>
-          {state.samplePreview && <>
-            <p className="text-sm">Prepared fee: {xlm(object(state.samplePreview.assembly).fee_stroops)}.
-              {" "}Review expires within 120 seconds and may expire sooner as ledgers advance.</p>
-            <div className="flex flex-wrap gap-3">
-              <button className={button} disabled={busy}
-                onClick={() => void run((value) => value.approveSample())}>Approve 0.1 XLM transfer with owner passkey</button>
-              <button className={button} disabled={busy}
-                onClick={() => void run((value) => value.cancelSample())}>Cancel sample review</button>
-            </div>
-            <Evidence title="Exact unsigned sample transaction and owner evidence" value={state.samplePreview} />
-          </>}
-          {state.sampleAttempted && !state.sampleTransactionHash && <p className="text-sm text-amber-200">
-            A submission was attempted. Further sample attempts are disabled. Check the backend journal if confirmation is missing.
-          </p>}
-          {state.sampleTransactionHash && <p className="text-sm text-cyan-300">
-            Sample transfer confirmed. Record its hash below to generate the grant.
-          </p>}
-        </div>}
         <label htmlFor="record-hash" className="block text-sm">Confirmed testnet transaction hash authorized by this account</label>
         <input id="record-hash" className={input} value={transactionHash} onChange={(event) => setTransactionHash(event.target.value)} />
         <button className={button} disabled={busy || !state?.wallet || !state?.status?.capabilities.record}
@@ -454,11 +493,15 @@ function PolicyBuilder() {
       <section className={panel} aria-labelledby="deploy-heading">
         <h2 id="deploy-heading" className="text-xl font-semibold">3. Deploy the exact artifact</h2>
         <p className="text-sm text-slate-300">Deployment spends the local testnet fee payer's funds. It does not grant authority over your account.</p>
-        <button className={button} disabled={busy || !state?.artifact || !!state.deployment || !state?.status?.capabilities.deploy}
+        <button className={button} disabled={busy || !state?.artifact || !!state.deployment || open("deploy", state?.deployPreview)
+          || !state?.status?.capabilities.deploy}
           onClick={() => void run((value) => value.prepareDeploy())}>Preview deployment</button>
         <Evidence title="Deployment consent" value={state?.deployPreview} open />
-        {state?.deployPreview && <button className={button} disabled={busy}
-          onClick={() => void run((value) => value.confirmDeploy())}>Confirm exact policy deployment</button>}
+        {state?.deployPreview && <>
+          <ReviewWindow until={windows.deploy} now={now} />
+          <button className={button} disabled={busy || !open("deploy", state.deployPreview)}
+            onClick={() => void run((value) => value.confirmDeploy())}>Confirm exact policy deployment</button>
+        </>}
         <Evidence title="Deployed policy and binding set" value={state?.deployment} />
       </section>
       <section className={panel} aria-labelledby="review-heading">
@@ -487,11 +530,12 @@ function PolicyBuilder() {
           which the policy must permit, and one stroop more, which it must refuse. Nothing is submitted, but the signatures it needs are
           real until they expire, so the check runs only after you consent to the statement below.</p>
         {state?.status?.capabilities.liveCheck && <button className={button}
-          disabled={busy || !state?.review || !state?.delegate || !!state?.livePreview}
+          disabled={busy || !state?.review || !state?.delegate || open("live", state?.livePreview)}
           onClick={() => void run((value) => value.prepareLive())}>Prepare the live check</button>}
         {state?.livePreview && <LiveConsent display={state.livePreview.display} />}
+        {state?.livePreview && <ReviewWindow until={windows.live} now={now} />}
         {state?.livePreview && <div className="flex flex-wrap gap-3">
-          <button className={button} disabled={busy}
+          <button className={button} disabled={busy || !open("live", state.livePreview)}
             onClick={() => void run((value) => value.consentLive())}>I consent: sign the installation with my owner passkey and simulate both cases</button>
           <button className={button} disabled={busy}
             onClick={() => void run((value) => value.cancelLive())}>Cancel live check</button>
@@ -516,11 +560,13 @@ function PolicyBuilder() {
           {typeof state?.status?.installOpensAfterLedger === "number" && <> An earlier released signature stays valid until ledger
             {" "}{label(state.status.installOpensAfterLedger)}; no installation entry is released before that ledger has passed.</>}</p>
         <button className={button}
-          disabled={busy || !state?.review || !gate.acceptanceReady || !state?.status?.capabilities.install || state?.installAttempted || !!state?.installPreview}
+          disabled={busy || !state?.review || !gate.acceptanceReady || !state?.status?.capabilities.install || state?.installAttempted || open("install", state?.installPreview)}
           onClick={() => void run((value) => value.prepareInstall())}>Prepare installation</button>
         {state?.installPreview && <InstallConsent display={state.installPreview.display} />}
+        {state?.installPreview && <ReviewWindow until={windows.install} now={now}
+          expired="The entry released for it stays valid until its ledger, so a new one can be prepared only after that ledger has passed." />}
         {state?.installPreview && <div className="flex flex-wrap gap-3">
-          <button className={button} disabled={busy}
+          <button className={button} disabled={busy || !open("install", state.installPreview)}
             onClick={() => void run((value) => value.install())}>I consent: sign the installation with my owner passkey</button>
           <button className={button} disabled={busy}
             onClick={() => void run((value) => value.cancelInstall())}>Cancel installation</button>
@@ -538,12 +584,13 @@ function PolicyBuilder() {
         <p className="text-sm text-slate-300">Removes the installed rule with a transaction your owner passkey signs. It succeeds only when the
           account reports the removal and the rule then reads back absent; whether the policy dropped its own state is reported separately.</p>
         <button className={button}
-          disabled={busy || !state?.installation || !state?.status?.capabilities.lifecycle || state?.revokeAttempted || !!state?.revokePreview || items(state?.monitor?.reasons).some((reason) =>
+          disabled={busy || !state?.installation || !state?.status?.capabilities.lifecycle || state?.revokeAttempted || open("revoke", state?.revokePreview) || items(state?.monitor?.reasons).some((reason) =>
             ["account_code_changed", "verifier_code_changed", "owner_rule_changed"].includes(label(reason)))}
           onClick={() => void run((value) => value.prepareRevoke())}>Prepare revocation</button>
         {state?.revokePreview && <RevokeConsent display={state.revokePreview.display} />}
+        {state?.revokePreview && <ReviewWindow until={windows.revoke} now={now} />}
         {state?.revokePreview && <div className="flex flex-wrap gap-3">
-          <button className={button} disabled={busy}
+          <button className={button} disabled={busy || !open("revoke", state.revokePreview)}
             onClick={() => void run((value) => value.revoke())}>I consent: sign the removal with my owner passkey</button>
           <button className={button} disabled={busy}
             onClick={() => void run((value) => value.cancelRevoke())}>Cancel revocation</button>
@@ -573,11 +620,13 @@ function PolicyBuilder() {
         <p className="text-sm text-slate-300">Verify removal of the old grant before starting a new one. A new installation has a fresh
           counter: previously used authority is additional to its new cap. Replacement requires fresh review, all execution checks
           and owner approval of the new installation.</p>
-        <button className={button} disabled={busy || !state?.removal || !state?.status?.capabilities.replacement || !!state?.replacementPreview}
+        <button className={button} disabled={busy || !state?.removal || !state?.status?.capabilities.replacement || open("replacement", state?.replacementPreview)}
           onClick={() => void run((value) => value.prepareReplacement())}>Prepare replacement</button>
         {state?.replacementPreview && <>
           <Evidence title="Fresh-budget acknowledgement" value={state.replacementPreview.display} open />
-          <button className={button} disabled={busy} onClick={() => void run((value) => value.confirmReplacement())}>
+          <ReviewWindow until={windows.replacement} now={now} />
+          <button className={button} disabled={busy || !open("replacement", state.replacementPreview)}
+            onClick={() => void run((value) => value.confirmReplacement())}>
             I acknowledge the fresh budget: start a new grant</button>
           <button className={button} disabled={busy} onClick={() => void run((value) => value.cancelReplacement())}>Cancel replacement</button>
         </>}

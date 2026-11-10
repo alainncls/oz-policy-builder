@@ -46,6 +46,8 @@ export interface WalletState {
   readonly replacementPending: Details | null;
   readonly replacement: Details | null;
   readonly proposalReview: ProposalReview | null;
+  /** When each prepared review stops being offered, in ms on the controller's monotonic clock. */
+  readonly windows: Readonly<Record<string, number>>;
 }
 export class WalletController {
   constructor(options: {
@@ -74,6 +76,10 @@ export class WalletController {
     pins: { networkId: string; accountWasm: string; verifierWasm: string };
     onChange?(state: WalletState): void;
     pause?(ms: number): Promise<void>;
+    /** Monotonic milliseconds; defaults to performance.now(). */
+    now?(): number;
+    /** Wall-clock milliseconds, which keep counting while the computer sleeps; defaults to Date.now(). */
+    wall?(): number;
   });
   readonly state: WalletState;
   connect(): Promise<void>;

@@ -6,6 +6,7 @@ const caseResults = (denials) => [
     agree: true, stateUnchanged: true, refusedBy: 'policy', refusalCode: 6 })),
 ];
 import { WalletController } from '../overlay/files/src/policy-builder/client/controller.mjs';
+import { LIVE_CONSENT_MIN_LEDGERS, LIVE_RUN_MIN_LEDGERS } from '../shared/live-consent.mjs';
 
 const hash = (c) => c.repeat(64);
 const pins = { networkId: hash('1'), accountWasm: hash('2'), verifierWasm: hash('3') };
@@ -29,20 +30,23 @@ function fixture() {
       rules: [{ valid_until: { ledger: 123 }, authorization: { signers: [{ delegated: { address: 'delegate' } }] },
         state: [{ call_count_per_installation: { max_calls: 2 } }], allowed_calls: [{ fn: 'transfer', args: [] }] },
     ] }, files: [] },
-    'prepare-deploy': { action: { id: 'deploy1' }, summary: { specHash: hash('a'), wasmHash: hash('b') } },
+    'prepare-deploy': { action: { id: 'deploy1', expires_in_seconds: 120 }, summary: { specHash: hash('a'), wasmHash: hash('b') } },
     'confirm-deploy': { deploymentId: 'deployment1', policyAddress: 'policy1', wasmHash: hash('b'), bindingSetHash: hash('c') },
     review: { reviewId: 'review1', wallet, verification, expected: { specHash: hash('a'), bindingSetHash: hash('c') },
       intent: { policies: [{ address: 'policy1', wasm_hash: hash('b') }] }, ownerRuleXdr: 'owner' },
     assemble: { action: { id: hash('5'), expires_in_seconds: 120 }, verification, assembly: {}, ownerRuleXdr: 'owner', limits: {},
       display: INSTALL_DISPLAY },
     submit: { receipt: { hash: hash('e') }, installation: INSTALLATION },
-    'prepare-revoke': { action: { id: hash('7'), expires_in_seconds: 120 }, assembly: {}, ownerRuleXdr: 'owner', limits: {},
+    'prepare-revoke': { action: { id: hash('7'), expires_in_seconds: 120 }, assembly: {}, ownerRuleXdr: 'owner',
+      limits: { currentLedger: 101, ownerReadLedger: 100 },
       display: REVOKE_DISPLAY, installation: INSTALLATION },
     'confirm-revoke': { receipt: { hash: hash('f') }, removal: { status: 'removed', ruleId: 1, transactionHash: hash('f'),
       event: 'verified', ruleReadback: 'absent', policyCleanup: 'not_installed' } },
   };
   const calls = [];
   const pauses = [];
+  const clock = { now: 1_000_000, wall: 5_000_000 };
+  const hooks = {};
   const validators = {
     reviewIntent: (value) => ({ ...value, ownerRuleId: 7, commitment: hash('4') }),
     validateAssembly: () => ({ authEntriesXdr: ['unsigned'], ownerRuleId: 7, expirationLedger: 123 }),
@@ -58,10 +62,10 @@ function fixture() {
       const reply = typeof replies[name] === 'function' ? replies[name]() : replies[name];
       if (reply instanceof Error) throw reply;
       return reply;
-    }, pause: async (ms) => { pauses.push(ms); },
-    validators, sign: async () => { calls.push(['sign']); return ['signed']; }, origin: 'http://localhost:3000',
+    }, pause: async (ms) => { pauses.push(ms); }, now: () => clock.now, wall: () => clock.wall,
+    validators, sign: async () => { calls.push(['sign']); hooks.sign?.(); return ['signed']; }, origin: 'http://localhost:3000',
   });
-  return { controller, replies, calls, validators, pauses };
+  return { controller, replies, calls, validators, pauses, clock, hooks };
 }
 async function prepared(f) {
   await f.controller.connect();
@@ -215,17 +219,18 @@ test('review refuses a substituted policy, binding or grant artifact', async () 
   }
 });
 
+const SAMPLE_LIMITS = { feePayer: 'payer', currentLedger: 101, ownerReadLedger: 100 };
 function sampleFixture() {
   const f = fixture();
   const descriptor = { recipient: 'payer', amountStroops: '1000000', ownerRuleXdr: 'created-owner' };
   const approval = { wallet, ownerRuleId: 0, commitment: hash('8') };
   const checked = { authEntriesXdr: ['sample-auth'], ownerRuleId: 0, expirationLedger: 123 };
   f.replies.status.capabilities.sampleTransfer = true;
-  f.replies['prepare-account'] = { action: { id: 'create1' }, summary: { ...wallet,
+  f.replies['prepare-account'] = { action: { id: 'create1', expires_in_seconds: 120 }, summary: { ...wallet,
     accountWasm: pins.accountWasm, verifierWasm: pins.verifierWasm } };
   f.replies['confirm-account'] = { wallet, sample: descriptor, receipts: [] };
   f.replies['prepare-sample'] = { action: { id: hash('4'), expires_in_seconds: 120 },
-    ownerRuleXdr: descriptor.ownerRuleXdr, assembly: { exact: 'sample-envelope' }, limits: { feePayer: 'payer' },
+    ownerRuleXdr: descriptor.ownerRuleXdr, assembly: { exact: 'sample-envelope' }, limits: SAMPLE_LIMITS,
     approval: { wallet: { contractId: 'forged' } }, checked: { authEntriesXdr: ['forged-auth'] } };
   f.replies['submit-sample'] = { transactionHash: hash('e'), receipt: { hash: hash('e') } };
   f.validators.reviewSample = (input) => {
@@ -236,7 +241,7 @@ function sampleFixture() {
   };
   f.validators.validateSampleAssembly = (input) => {
     assert.deepEqual(input, { approval, ownerRuleXdr: 'created-owner',
-      assembly: { exact: 'sample-envelope' }, limits: { feePayer: 'payer' } });
+      assembly: { exact: 'sample-envelope' }, limits: SAMPLE_LIMITS });
     f.calls.push(['validateSampleAssembly', input]);
     return checked;
   };
@@ -318,6 +323,150 @@ test('cancelling sample review requires a new preparation and does not sign or s
   assert.equal(f.calls.filter(([name]) => name === 'submit-sample').length, 1);
 });
 
+// A review closes 5 s before the backend's deadline, counted from before the request: the action's
+// 120 s, or sooner where approval re-checks a ledger bound (testnet: 5 s a ledger).
+const WINDOW_MS = 115_000;
+// Sample: the owner read at ledger 100 may be 12 ledgers old, and ledger 101 is current.
+const OWNER_READ_WINDOW_MS = 11 * 5_000 - 5_000;
+test('an expired sample review asks no passkey and can be prepared again', async () => {
+  const f = sampleFixture();
+  await created(f);
+  const started = f.clock.now;
+  await f.controller.prepareSample();
+  assert.equal(f.controller.state.windows.sample, started + OWNER_READ_WINDOW_MS);
+  f.clock.now += OWNER_READ_WINDOW_MS;
+  await assert.rejects(f.controller.approveSample(), /wallet action refused/);
+  assert.equal(f.calls.some(([name]) => name === 'sign' || name === 'submit-sample'), false);
+  assert.equal(f.controller.state.samplePreview, null);
+  assert.equal(f.controller.state.sampleAttempted, false);
+  await f.controller.prepareSample();
+  f.clock.now += OWNER_READ_WINDOW_MS - 1;
+  await f.controller.approveSample();
+  assert.equal(f.calls.filter(([name]) => name === 'submit-sample').length, 1);
+});
+test('a sample review that expires while the passkey is open is never sent', async () => {
+  const f = sampleFixture();
+  await created(f);
+  await f.controller.prepareSample();
+  f.hooks.sign = () => { f.clock.now += OWNER_READ_WINDOW_MS; };
+  await assert.rejects(f.controller.approveSample(), /wallet action refused/);
+  assert.equal(f.calls.filter(([name]) => name === 'sign').length, 1);
+  assert.equal(f.calls.some(([name]) => name === 'submit-sample'), false, 'the signature never leaves the browser');
+  assert.equal(f.controller.state.sampleAttempted, false);
+  f.hooks.sign = null;
+  await f.controller.prepareSample();
+  await f.controller.approveSample();
+  assert.equal(f.calls.filter(([name]) => name === 'submit-sample').length, 1);
+  assert.equal(f.controller.state.sampleTransactionHash, hash('e'));
+});
+test('a review window counts from before the request and closes on either clock', async () => {
+  const f = sampleFixture();
+  await created(f);
+  const reply = f.replies['prepare-sample'];
+  f.replies['prepare-sample'] = () => { f.clock.now += 3_000; f.clock.wall += 3_000; return reply; };
+  const started = f.clock.now;
+  await f.controller.prepareSample();
+  assert.equal(f.controller.state.windows.sample, started + OWNER_READ_WINDOW_MS, 'the request time is inside the window');
+  f.clock.wall += OWNER_READ_WINDOW_MS;
+  await assert.rejects(f.controller.approveSample(), /wallet action refused/, 'ledgers close while the monotonic clock sleeps');
+  assert.equal(f.calls.some(([name]) => name === 'sign' || name === 'submit-sample'), false);
+  assert.equal(f.controller.state.sampleAttempted, false);
+});
+test('a review without a valid lifetime is refused instead of staying open', async () => {
+  for (const expires of [undefined, 0, 121, 1.5]) {
+    const f = sampleFixture();
+    f.replies['prepare-account'] = { ...f.replies['prepare-account'], action: { id: 'create1', expires_in_seconds: expires } };
+    await f.controller.connect();
+    await assert.rejects(f.controller.prepareAccount({ credentialId: wallet.credentialId, publicKey: wallet.publicKey }),
+      /wallet action refused/, String(expires));
+    assert.equal(f.controller.state.accountPreview, null);
+  }
+  const f = sampleFixture();
+  await created(f);
+  f.replies['prepare-sample'] = { ...f.replies['prepare-sample'], limits: { ...SAMPLE_LIMITS, currentLedger: 112 } };
+  await assert.rejects(f.controller.prepareSample(), /wallet action refused/, 'no ledgers left before the owner read is too old');
+  assert.equal(f.controller.state.samplePreview, null);
+});
+test('expired account and deployment reviews are not confirmed', async () => {
+  const f = sampleFixture();
+  await f.controller.connect();
+  const started = f.clock.now;
+  await f.controller.prepareAccount({ credentialId: wallet.credentialId, publicKey: wallet.publicKey });
+  assert.equal(f.controller.state.windows.account, started + WINDOW_MS);
+  f.clock.now += WINDOW_MS;
+  await assert.rejects(f.controller.confirmAccount(), /wallet action refused/);
+  assert.equal(f.calls.some(([name]) => name === 'confirm-account'), false);
+  await f.controller.prepareAccount({ credentialId: wallet.credentialId, publicKey: wallet.publicKey });
+  await f.controller.confirmAccount();
+  const g = fixture();
+  await g.controller.connect();
+  g.controller.attachWallet(wallet);
+  await g.controller.record(hash('d'));
+  await g.controller.generate({ delegateAddress: 'delegate', maxCalls: 2, validUntilLedger: 123, grantName: 'grant' });
+  await g.controller.prepareDeploy();
+  g.clock.now += WINDOW_MS;
+  await assert.rejects(g.controller.confirmDeploy(), /wallet action refused/);
+  assert.equal(g.calls.some(([name]) => name === 'confirm-deploy'), false);
+  await g.controller.prepareDeploy();
+  await g.controller.confirmDeploy();
+  assert.equal(g.controller.state.deployment.deploymentId, 'deployment1');
+});
+test('an expired installation review asks no passkey, keeps the review and reads when the next can be released', async () => {
+  const f = fixture();
+  await prepared(f);
+  const started = f.clock.now;
+  await f.controller.prepareInstall();
+  assert.equal(f.controller.state.windows.install, started + WINDOW_MS);
+  f.clock.now += WINDOW_MS;
+  const before = f.calls.length;
+  await assert.rejects(f.controller.install(), /wallet action refused/);
+  assert.deepEqual(f.calls.slice(before).map(([name]) => name), ['status']);
+  assert.equal(f.controller.state.installAttempted, false);
+  assert.notEqual(f.controller.state.review, null);
+  await f.controller.prepareInstall();
+  await f.controller.install();
+  assert.equal(f.calls.filter(([name]) => name === 'submit').length, 1);
+});
+test('an installation review that expires while the passkey is open is never sent', async () => {
+  const f = fixture();
+  await prepared(f);
+  await f.controller.prepareInstall();
+  f.hooks.sign = () => { f.clock.now += WINDOW_MS; };
+  await assert.rejects(f.controller.install(), /wallet action refused/);
+  assert.equal(f.calls.some(([name]) => name === 'submit'), false, 'the signature never leaves the browser');
+  assert.equal(f.controller.state.installAttempted, false);
+  assert.equal(f.controller.state.installOwner, null);
+  assert.notEqual(f.controller.state.review, null);
+  f.hooks.sign = null;
+  await f.controller.prepareInstall();
+  await f.controller.install();
+  assert.equal(f.controller.state.installation.installationId, hash('6'));
+});
+test('an expired removal review asks no passkey, and one expiring during the passkey is never sent', async () => {
+  // Approval reads the owner again, so a removal review is bounded by the action alone.
+  for (const during of [false, true]) {
+    const f = fixture();
+    await prepared(f);
+    await f.controller.prepareInstall();
+    await f.controller.install();
+    f.replies.status = { ...f.replies.status, capabilities: { ...f.replies.status.capabilities, lifecycle: true } };
+    const started = f.clock.now;
+    await f.controller.prepareRevoke();
+    assert.equal(f.controller.state.windows.revoke, started + WINDOW_MS);
+    if (during) f.hooks.sign = () => { f.clock.now += WINDOW_MS; };
+    else f.clock.now += WINDOW_MS;
+    const signs = f.calls.filter(([name]) => name === 'sign').length;
+    await assert.rejects(f.controller.revoke(), /wallet action refused/);
+    assert.equal(f.calls.filter(([name]) => name === 'sign').length, signs + (during ? 1 : 0));
+    assert.equal(f.calls.some(([name]) => name === 'confirm-revoke'), false);
+    assert.equal(f.controller.state.revokeAttempted, false);
+    f.hooks.sign = null;
+    await f.controller.prepareRevoke();
+    await f.controller.revoke();
+    assert.equal(f.controller.state.removal.ruleReadback, 'absent');
+  }
+});
+
 const DELEGATE = `G${'A'.repeat(55)}`;
 async function accountChecked(change = () => {}) {
   const f = fixture();
@@ -384,9 +533,9 @@ function liveFixture() {
   f.replies['create-delegate'] = { capabilityId: hash('5'), address: `G${'A'.repeat(55)}` };
   f.replies.generate.spec.rules[0].authorization.signers[0].delegated.address = f.replies['create-delegate'].address;
   const display = { signature_expiration_ledger: 130, warning: 'Until ledger 130, these signatures are real and submittable.' };
-  f.replies['prepare-live'] = { reviewId: 'review1', live: { action: { id: hash('6') }, display, statementSha256: hash('7'),
+  f.replies['prepare-live'] = { reviewId: 'review1', live: { action: { id: hash('6'), expires_in_seconds: 120 }, display, statementSha256: hash('7'),
     inputs: { helper: 'helper', policyCodeHash: hash('b'), expectedRuleId: 1, currentLedger: 100, signatureExpirationLedger: 130 } } };
-  f.replies['consent-live'] = { action: { id: hash('8') }, ownerEntryXdr: 'unsigned owner entry', signatureExpirationLedger: 130 };
+  f.replies['consent-live'] = { action: { id: hash('8'), expires_in_seconds: 120 }, ownerEntryXdr: 'unsigned owner entry', signatureExpirationLedger: 130 };
   f.replies['run-live'] = { reviewId: 'review1', verification: f.replies.review.verification };
   f.replies['check-replay'] = { replay: { status: 'waiting', latestLedger: 120, signaturesValidUntil: 130 } };
   Object.assign(f.validators, {
@@ -426,6 +575,24 @@ test('the live check shows the browser\'s own statement, then consent, then the 
   assert.equal(f.calls.at(-1)[0], 'status', 'the replay answer refreshes the backend capabilities');
 });
 
+test('an expired live statement is not consented to, and a run past its window is not started', async () => {
+  // The statement is open while consent leaves 15 ledgers of the signatures' validity (expiry 130, ledger 100).
+  const statementMs = (130 - LIVE_CONSENT_MIN_LEDGERS - 100) * 5_000 - 5_000;
+  const f = liveFixture();
+  await livePrepared(f);
+  const started = f.clock.now;
+  await f.controller.prepareLive();
+  assert.equal(f.controller.state.windows.live, started + statementMs);
+  f.clock.now += statementMs;
+  await assert.rejects(f.controller.consentLive(), /wallet action refused/);
+  assert.equal(f.calls.some(([name]) => name === 'consent-live' || name === 'sign'), false);
+  await f.controller.prepareLive();
+  // Accepted consent leaves the run 15 - 3 ledgers.
+  f.hooks.sign = () => { f.clock.now += (LIVE_CONSENT_MIN_LEDGERS - LIVE_RUN_MIN_LEDGERS) * 5_000 - 5_000; };
+  await assert.rejects(f.controller.consentLive(), /wallet action refused/);
+  assert.equal(f.calls.filter(([name]) => name === 'consent-live').length, 1);
+  assert.equal(f.calls.some(([name]) => name === 'run-live'), false, 'the owner signature never leaves the browser');
+});
 test('consent required before any live signature: no preview, a different statement or a changed entry asks no passkey', async () => {
   const noPreview = liveFixture();
   await livePrepared(noPreview);
@@ -701,7 +868,7 @@ async function removedForReplacement() {
   f.replies.status.capabilities.replacement = true;
   f.replies['prepare-revoke'].limits.maxFeeStroops = f.replies.status.maxFeeStroops;
   f.validators.replacementConsent = () => REPLACEMENT_DISPLAY;
-  f.replies['prepare-replacement'] = { action: { id: hash('8') }, display: REPLACEMENT_DISPLAY };
+  f.replies['prepare-replacement'] = { action: { id: hash('8'), expires_in_seconds: 120 }, display: REPLACEMENT_DISPLAY };
   f.replies['confirm-replacement'] = { replacementReady: true, actionId: hash('8'), display: REPLACEMENT_DISPLAY };
   await prepared(f); await f.controller.prepareInstall(); await f.controller.install();
   await f.controller.prepareRevoke(); await f.controller.revoke();
@@ -720,6 +887,19 @@ test('replacement has separate consent, signs nothing, discards the old review a
   assert.equal(f.controller.state.installation, null); assert.deepEqual(f.controller.state.replacement, REPLACEMENT_DISPLAY);
   await assert.rejects(f.controller.prepareInstall(), /refused/, 'new candidate and checks required');
 });
+test('an expired replacement acknowledgement is not confirmed and can be prepared again', async () => {
+  const f = await removedForReplacement();
+  const started = f.clock.now;
+  await f.controller.prepareReplacement();
+  assert.equal(f.controller.state.windows.replacement, started + WINDOW_MS);
+  f.clock.now += WINDOW_MS;
+  await assert.rejects(f.controller.confirmReplacement(), /wallet action refused/);
+  assert.equal(f.calls.some(([name]) => name === 'confirm-replacement'), false);
+  assert.equal(f.controller.state.replacement, null);
+  await f.controller.prepareReplacement();
+  await f.controller.confirmReplacement();
+  assert.deepEqual(f.controller.state.replacement, REPLACEMENT_DISPLAY);
+});
 test('cancelled or refused replacement retains the removed grant and spent installation state', async () => {
   const f = await removedForReplacement();
   await f.controller.prepareReplacement(); f.controller.cancelReplacement();
@@ -732,7 +912,7 @@ test('cancelled or refused replacement retains the removed grant and spent insta
 });
 test('substituted replacement consent cannot reset the browser installation guard', async () => {
   const f = await removedForReplacement();
-  f.replies['prepare-replacement'] = { action: { id: hash('8') }, display: { ...REPLACEMENT_DISPLAY, previousRuleId: 9 } };
+  f.replies['prepare-replacement'] = { action: { id: hash('8'), expires_in_seconds: 120 }, display: { ...REPLACEMENT_DISPLAY, previousRuleId: 9 } };
   await assert.rejects(f.controller.prepareReplacement(), /refused/);
   assert.equal(f.controller.state.replacementPreview, null); assert.equal(f.controller.state.installAttempted, true);
 });

@@ -190,6 +190,9 @@ and no delegated transaction was submitted under the installed rule.
 1. Create a passkey using Pollywallet's existing authenticator helper, then separately review
    and confirm recognized account deployment. Alternatively attach the public locator of an
    existing recognized account. Retain that locator to reconnect; it contains no private key.
+   The backend creates one account per session, so once it has, the page does not offer a new
+   passkey again; attaching a locator remains available. An expired account preview is shown
+   again for the same passkey.
 2. For an account created in this session, prepare the fixed sample transfer, review its
    sender, recipient and fee, then separately approve it with the owner passkey. It transfers
    exactly 0.1 testnet XLM back to the local fee payer, which pays at most one testnet XLM in
@@ -223,8 +226,21 @@ Account and policy deployment confirmations are distinct from owner authorizatio
 or refused signing attempt consumes the prepared review. Sample preparation is available only
 for the exact wallet created in this backend session and checks its retained full owner-zero
 getter, including the fresh constructor's empty `policy_ids` and `signer_ids: [0]`.
-A new preparation invalidates the old action; its 120-second token can expire sooner
-under the ledger freshness checks. Cancellation before submission permits another preparation.
+A new preparation invalidates the old action. Cancellation before submission permits another
+preparation.
+
+Every prepared review shows the seconds it stays open, and the browser stops offering it before
+the backend would refuse it: the action's 120 seconds, counted from before the request, or sooner
+where approval checks a ledger bound again, less five seconds for the submission to arrive. The
+sample's owner read may be at most 12 ledgers old; live consent needs 15 ledgers of signature
+validity left, and the run 3. The browser counts a testnet ledger as five seconds (200 consecutive
+ledgers measured on 10 November 2026), so a sample review stays open for about 50 seconds. A
+window closes on the wall clock too, because ledgers keep closing while a sleeping computer's
+monotonic clock may not. An expired review asks no passkey, and one that ends while the passkey is
+open is not sent: its signature never leaves the browser. The review can then be prepared again,
+except where the backend has already released an entry for it: an expired installation review,
+or a live check whose run window ended during the passkey, keeps that entry valid until its
+ledger, and the next one is released only after that ledger has passed.
 After any sample submission attempt, the client disables further attempts, including when a
 response is lost. Backend enforcement, fresh code/owner/sequence checks and the journal still
 apply before the fee payer signs or sends anything. The confirmed hash is offered for a
@@ -732,6 +748,12 @@ helpers at the supported `localhost` origin, independently verifies installation
 sample-transfer signatures, and submits no transaction. It removes its temporary browser
 module afterward. Omit
 `OZPB_BROWSER_CHANNEL` to use the installed Playwright Chromium instead of local Chrome.
+
+`OZPB_BROWSER_CHANNEL=chrome node scripts/test-wallet-page-browser.mjs http://localhost:3000`
+drives the route's new-account path against controlled backend dependencies and a virtual
+authenticator: the sample transfer follows the account, a spent passkey or open review is not
+offered again, the review window is shown, and a review past its window asks no passkey and is
+prepared again before a single submission. It makes no chain or signing claim.
 
 At the pinned upstream revision, `pnpm exec tsc --noEmit` already reports five errors in
 `src/hooks/useWallet.ts` and `src/lib/tx-analyzer.ts`. The unchanged upstream checkout produces
