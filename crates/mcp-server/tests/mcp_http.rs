@@ -29,12 +29,13 @@ impl Drop for Server {
     }
 }
 
-fn command(env: &[(&str, &str)]) -> Command {
+fn command_at(listen: &str, env: &[(&str, &str)]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ozpb-mcp-server"));
-    command.args(["--http", "127.0.0.1:0"]);
+    command.args(["--http", listen]);
     // Only what the test sets: an operator's own variables must not change the verdict.
     for name in [
         "OZPB_HTTP_BEARER_TOKEN",
+        "OZPB_HTTP_ALLOWED_HOSTS",
         "OZPB_RPC_ALLOWLIST",
         "OZPB_RPC_SOURCES_JSON",
         "OZPB_HTTP_REQUESTS_PER_MINUTE",
@@ -58,18 +59,28 @@ fn command(env: &[(&str, &str)]) -> Command {
 
 /// Start the server with a quota of `per_minute` and wait for the address it bound.
 fn start(per_minute: &str, max_body_bytes: &str) -> Server {
-    let mut child = command(&[
+    start_at(
+        "127.0.0.1:0",
+        &[
+            ("OZPB_HTTP_REQUESTS_PER_MINUTE", per_minute),
+            ("OZPB_HTTP_MAX_BODY_BYTES", max_body_bytes),
+        ],
+    )
+}
+
+fn start_at(listen: &str, extra: &[(&str, &str)]) -> Server {
+    let mut env = vec![
         ("OZPB_HTTP_BEARER_TOKEN", TOKEN),
         ("OZPB_RPC_ALLOWLIST", "https://rpc.example"),
-        ("OZPB_HTTP_REQUESTS_PER_MINUTE", per_minute),
-        ("OZPB_HTTP_MAX_BODY_BYTES", max_body_bytes),
         ("OZPB_BUILD_JOBS", "1"),
-    ])
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::piped())
-    .spawn()
-    .expect("spawn the HTTP server");
+    ];
+    env.extend_from_slice(extra);
+    let mut child = command_at(listen, &env)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn the HTTP server");
     let mut stderr = BufReader::new(child.stderr.take().expect("stderr"));
     let mut line = String::new();
     stderr.read_line(&mut line).expect("startup line");
@@ -88,7 +99,14 @@ fn start(per_minute: &str, max_body_bytes: &str) -> Server {
 
 /// POST `body` to `/v1/mcp` and return the response status code.
 fn post(server: &Server, bearer: Option<&str>, body: &str) -> u16 {
-    let mut stream = TcpStream::connect(&server.addr).expect("connect");
+    post_as(server, &server.addr, bearer, body)
+}
+
+/// The same, naming `host` in the request's `Host` header, as an ingress forwarding it would.
+fn post_as(server: &Server, host: &str, bearer: Option<&str>, body: &str) -> u16 {
+    // A wildcard bind is reached on loopback.
+    let target = server.addr.replace("0.0.0.0", "127.0.0.1");
+    let mut stream = TcpStream::connect(&target).expect("connect");
     let timeout = Some(Duration::from_secs(10));
     stream.set_read_timeout(timeout).expect("read timeout");
     stream.set_write_timeout(timeout).expect("write timeout");
@@ -101,7 +119,7 @@ fn post(server: &Server, bearer: Option<&str>, body: &str) -> u16 {
         "POST /v1/mcp HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\n\
          Accept: application/json, text/event-stream\r\n{authorization}\
          Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        server.addr,
+        host,
         body.len()
     );
     stream.write_all(request.as_bytes()).expect("write request");
@@ -116,7 +134,11 @@ fn post(server: &Server, bearer: Option<&str>, body: &str) -> u16 {
 /// Run a server that must refuse to start, and return what it printed. A regression that let it
 /// start fails here after a deadline instead of hanging the suite.
 fn refused_startup(env: &[(&str, &str)]) -> String {
-    let mut child = command(env)
+    refused_startup_at("127.0.0.1:0", env)
+}
+
+fn refused_startup_at(listen: &str, env: &[(&str, &str)]) -> String {
+    let mut child = command_at(listen, env)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -207,4 +229,37 @@ fn hosted_mode_refuses_to_start_on_a_missing_token_or_a_zero_limit() {
             "{name}: {stderr}"
         );
     }
+}
+
+#[test]
+fn a_routable_listener_needs_the_ingress_hosts_and_answers_only_those() {
+    let stderr = refused_startup_at(
+        "0.0.0.0:0",
+        &[
+            ("OZPB_HTTP_BEARER_TOKEN", TOKEN),
+            ("OZPB_RPC_ALLOWLIST", "https://rpc.example"),
+            ("OZPB_BUILD_JOBS", "1"),
+        ],
+    );
+    assert!(stderr.contains("OZPB_HTTP_ALLOWED_HOSTS"), "{stderr}");
+
+    let server = start_at(
+        "0.0.0.0:0",
+        &[("OZPB_HTTP_ALLOWED_HOSTS", "mcp.example.test")],
+    );
+    assert_eq!(
+        post_as(&server, "mcp.example.test", None, INITIALIZE),
+        401,
+        "no token"
+    );
+    assert_eq!(
+        post_as(&server, "mcp.example.test", Some(TOKEN), INITIALIZE),
+        200,
+        "the named host"
+    );
+    assert_eq!(
+        post_as(&server, "other.example.test", Some(TOKEN), INITIALIZE),
+        403,
+        "a host the ingress does not forward"
+    );
 }

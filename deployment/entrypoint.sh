@@ -35,4 +35,11 @@ OZPB_REGISTRY_ROOTS_JSON=$(cat "$config_dir/registry-roots.json")
 OZPB_REGISTRY_SNAPSHOT_JSON=$(cat "$config_dir/registry.signed.json")
 OZPB_RPC_SOURCES_JSON=$(cat "$config_dir/rpc-sources.json")
 export OZPB_REGISTRY_ROOTS_JSON OZPB_REGISTRY_SNAPSHOT_JSON OZPB_RPC_SOURCES_JSON
-exec /usr/local/bin/ozpb-mcp-server --http 127.0.0.1:8080
+# Loopback by default, for the TLS proxy beside it. An ingress that reaches the server over the
+# network sets OZPB_HTTP_LISTEN (for example 0.0.0.0:8080) together with OZPB_HTTP_ALLOWED_HOSTS,
+# the public names it forwards; the server refuses a routable address without them.
+listen=${OZPB_HTTP_LISTEN:-127.0.0.1:8080}
+case "$listen" in
+    *[!0-9A-Fa-f.:\[\]]*|'') echo 'OZPB_HTTP_LISTEN must be an IP address and port' >&2; exit 1 ;;
+esac
+exec /usr/local/bin/ozpb-mcp-server --http "$listen"

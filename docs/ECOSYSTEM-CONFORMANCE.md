@@ -790,7 +790,8 @@ failures return as MCP `CallToolResult` values with `isError: true` and structur
 so an agent can distinguish transaction-not-found, network mismatch, import parse, build
 timeout/resource, and registry failures by stable wire codes.
 
-The server never deploys, signs, or holds user keys. HTTP mode is loopback-only,
+The server never deploys, signs, or holds user keys. HTTP mode binds loopback unless the
+operator names the hosts an ingress forwards (`OZPB_HTTP_ALLOWED_HOSTS`), and is
 bearer-protected, body-bounded, rate-limited, build-concurrency-limited, and RPC-allowlisted.
 MCP annotations remain hints, not authorization controls.
 

@@ -129,6 +129,17 @@ rejects other host names, browser-origin requests and paths outside `/v1/mcp`. N
 clients send the bearer token over TLS. Browser integration and separate per-client quotas
 are not supplied by this shared-token configuration.
 
+### Behind your own ingress instead of the proxy
+
+A platform that terminates TLS itself, such as a Kubernetes ingress, can reach the API directly
+and leave the proxy out. Set `OZPB_HTTP_LISTEN` (for example `0.0.0.0:8080`) and
+`OZPB_HTTP_ALLOWED_HOSTS` to the public host names the ingress forwards (comma-separated
+`host[:port]`, no wildcards). The server refuses a routable listen address without the host
+list, and answers only those hosts and loopback (`403` otherwise). The bearer token, request
+quota, body bound and build limits apply unchanged. What the proxy did becomes the ingress's
+job: TLS with a certificate the clients trust, refusing paths other than `/v1/mcp` and
+browser-origin requests, and keeping request bodies and headers out of its access logs.
+
 The API has a 2-CPU, 4-GiB memory, 256-process ceiling; the proxy has 0.5 CPU, 128 MiB and
 64 processes. Both run as UID 10001 with no added capabilities, no privilege escalation and
 a read-only root filesystem. The API's temporary build data and cache occupy bounded tmpfs

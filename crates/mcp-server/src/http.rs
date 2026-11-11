@@ -227,7 +227,8 @@ pub(crate) async fn serve(
         session::local::LocalSessionManager, StreamableHttpService,
     };
 
-    let socket = require_loopback_bind(addr)?;
+    let allowed_hosts = std::env::var("OZPB_HTTP_ALLOWED_HOSTS").ok();
+    let (socket, hosts) = listen_policy(addr, allowed_hosts.as_deref())?;
     let bearer = std::env::var("OZPB_HTTP_BEARER_TOKEN")
         .map_err(|_| anyhow::anyhow!("OZPB_HTTP_BEARER_TOKEN is required for HTTP mode"))?;
     if bearer.len() < 32 {
@@ -258,7 +259,8 @@ pub(crate) async fn serve(
             limits.tool_limits,
         )?,
         LocalSessionManager::default().into(),
-        Default::default(),
+        rmcp::transport::streamable_http_server::StreamableHttpServerConfig::default()
+            .with_allowed_hosts(hosts),
     );
     let router = guard(
         axum::Router::new().nest_service(MCP_PATH, service),
@@ -280,19 +282,58 @@ pub(crate) async fn serve(
     Ok(())
 }
 
-/// Parse a bind address and require it to be loopback. Public exposure must go through a
-/// TLS-terminating, authenticating reverse proxy; the server itself never binds a routable
-/// interface. Extracted so the guard is unit-testable without starting a listener.
-pub(crate) fn require_loopback_bind(addr: &str) -> anyhow::Result<std::net::SocketAddr> {
+/// The `Host` names every listener answers: rmcp's own defaults.
+pub(crate) const LOOPBACK_HOSTS: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
+
+/// Parse the bind address and the `Host` names the endpoint answers. Public exposure goes
+/// through a TLS-terminating proxy or ingress. By default the server binds only loopback
+/// (the proxy beside it, as in the Compose package and its Kubernetes Pod) and answers only
+/// loopback names. An ingress that reaches the server over the network names the public
+/// hosts it forwards in `allowed_hosts` (`OZPB_HTTP_ALLOWED_HOSTS`, a comma-separated
+/// `host[:port]` list): only then is a routable address accepted, and only those hosts and
+/// loopback are answered. The bearer token, quota and body limit apply either way.
+/// Extracted so the policy is unit-testable without starting a listener.
+pub(crate) fn listen_policy(
+    addr: &str,
+    allowed_hosts: Option<&str>,
+) -> anyhow::Result<(std::net::SocketAddr, Vec<String>)> {
     let socket: std::net::SocketAddr = addr
         .parse()
         .map_err(|error| anyhow::anyhow!("invalid HTTP listen address '{addr}': {error}"))?;
-    if !socket.ip().is_loopback() {
-        anyhow::bail!(
-            "HTTP listener must bind to loopback; terminate TLS at an authenticated reverse proxy"
-        );
+    let mut hosts: Vec<String> = LOOPBACK_HOSTS.iter().map(|host| host.to_string()).collect();
+    match allowed_hosts {
+        None if !socket.ip().is_loopback() => anyhow::bail!(
+            "HTTP listener must bind to loopback unless OZPB_HTTP_ALLOWED_HOSTS names the hosts \
+             an authenticated, TLS-terminating ingress forwards"
+        ),
+        None => {}
+        Some(list) => {
+            for entry in list.split(',').map(str::trim) {
+                if !plain_authority(entry) {
+                    anyhow::bail!(
+                        "OZPB_HTTP_ALLOWED_HOSTS must be a comma-separated list of host[:port] \
+                         names, without wildcards, schemes or paths"
+                    );
+                }
+                hosts.push(entry.to_string());
+            }
+        }
     }
-    Ok(socket)
+    Ok((socket, hosts))
+}
+
+/// `host` or `host:port`: letters, digits, dots and hyphens, and a port from 1 to 65535.
+fn plain_authority(entry: &str) -> bool {
+    let (host, port) = match entry.rsplit_once(':') {
+        Some((host, port)) => (host, Some(port)),
+        None => (entry, None),
+    };
+    !host.is_empty()
+        && host.len() <= 253
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+        && port.is_none_or(|port| port.parse::<u16>().is_ok_and(|port| port > 0))
 }
 
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
@@ -533,16 +574,64 @@ mod tests {
     }
 
     #[test]
-    fn loopback_bind_is_required() {
-        // Loopback binds (v4 and v6) are accepted.
-        assert!(require_loopback_bind("127.0.0.1:8080").is_ok());
-        assert!(require_loopback_bind("[::1]:8080").is_ok());
-        // Routable interfaces are refused — no accidental public exposure.
-        assert!(require_loopback_bind("0.0.0.0:8080").is_err());
-        assert!(require_loopback_bind("192.168.1.10:8080").is_err());
-        assert!(require_loopback_bind("203.0.113.5:8080").is_err());
+    fn loopback_bind_is_required_unless_the_ingress_hosts_are_named() {
+        // Loopback binds (v4 and v6) are accepted, answering loopback names only.
+        for addr in ["127.0.0.1:8080", "[::1]:8080"] {
+            let (_, hosts) = listen_policy(addr, None).expect(addr);
+            assert_eq!(hosts, LOOPBACK_HOSTS);
+        }
+        // Routable interfaces are refused without named hosts — no accidental public exposure.
+        for addr in ["0.0.0.0:8080", "192.168.1.10:8080", "203.0.113.5:8080"] {
+            let error = listen_policy(addr, None).expect_err(addr);
+            assert!(
+                error.to_string().contains("OZPB_HTTP_ALLOWED_HOSTS"),
+                "{addr}: {error}"
+            );
+        }
         // Garbage is a parse error, not a bind.
-        assert!(require_loopback_bind("not-an-addr").is_err());
+        assert!(listen_policy("not-an-addr", None).is_err());
+    }
+
+    #[test]
+    fn named_ingress_hosts_allow_a_routable_bind_and_only_those_hosts() {
+        let (socket, hosts) = listen_policy(
+            "0.0.0.0:8080",
+            Some("policy-builder-mcp.dev.eu-north-3.gateway.fm, mcp.example.test:443"),
+        )
+        .expect("named hosts");
+        assert_eq!(socket.port(), 8080);
+        assert_eq!(
+            hosts,
+            [
+                "localhost",
+                "127.0.0.1",
+                "::1",
+                "policy-builder-mcp.dev.eu-north-3.gateway.fm",
+                "mcp.example.test:443"
+            ]
+        );
+        // A loopback bind may name them too, for a proxy that keeps the client's Host.
+        assert!(listen_policy("127.0.0.1:8080", Some("mcp.example.test")).is_ok());
+        // Anything that is not a plain host[:port] list is refused: no wildcard, scheme, path,
+        // empty entry or space, since rmcp would otherwise read an empty list as "any host".
+        for bad in [
+            "",
+            " ",
+            "*",
+            "*.example.test",
+            "https://mcp.example.test",
+            "mcp.example.test/v1/mcp",
+            "mcp.example.test,,other.test",
+            "mcp example.test",
+            "mcp.example.test:99999",
+            "mcp.example.test:",
+        ] {
+            let error = listen_policy("0.0.0.0:8080", Some(bad)).expect_err(bad);
+            assert!(
+                error.to_string().contains("OZPB_HTTP_ALLOWED_HOSTS"),
+                "{bad:?}: {error}"
+            );
+        }
     }
 
     #[test]
