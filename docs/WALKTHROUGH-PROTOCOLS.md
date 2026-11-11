@@ -80,6 +80,21 @@ to trusted binaries and the pinned Wasm, then run
 This builds both policies of a synthetic Soroswap fixture and executes them through the real
 CLI and worker. Its ledger parameters are fixed test data, and no RPC or live transaction runs.
 
+## A short run, and what it prints
+
+By default W1's grant lives 300 ledgers and W3's 180 (from the recorded transaction), and each run
+waits for that expiry to show the account refusing the expired rule, so most of a run is waiting.
+`OZPB_HARNESS_GRANT_LEDGERS=30` (30 to 1000) gives either a 30-ledger grant instead: the delegated
+call still comes well before expiry (13 ledgers after the recording in W1's 1 November run, 20 in
+W3's), and the expiry check follows within about two minutes. A value outside the bounds stops the
+run before setup.
+
+Every run ends with `run-summary.mjs`: each real transaction (the recorded owner call, the
+installation, the delegated call, the removal) with its explorer link, and each refusal with the
+contract that refused it and its code. Refusals are enforcing simulations, so they have no
+transaction; anyone can run the same walkthrough to see them. `node
+testnet-harness/scripts/run-summary.mjs --run-dir DIR` prints it again for a finished run.
+
 ## W3 Soroswap
 
 ```bash

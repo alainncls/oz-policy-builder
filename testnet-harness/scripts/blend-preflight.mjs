@@ -9,10 +9,12 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { Address, scValToNative, xdr } from '@stellar/stellar-sdk';
 import { isMainModule } from './cli-entry.mjs';
+import { grantLedgers } from './grant-ledgers.mjs';
 import { i128 } from './lib.mjs';
 import { PROTOCOL_TARGETS } from './protocol-calls.mjs';
 import { FACTORY, FACTORY_CODE } from './soroswap-preflight.mjs';
 import * as rpc from './rpc.mjs';
+
 
 /** The position the claim is earned on: a plain supply (request type 0) of Circle testnet USDC. */
 export const BLEND_POSITION = Object.freeze({
@@ -196,7 +198,7 @@ export async function prepareBlend(run, overrides = {}) {
     'payer cannot fund the account for the funding swap');
   const { close_time: closeTime, ...observed } = prerequisites;
   return {
-    kind: 'blend_claim', account: run.account, grant_duration_ledgers: GRANT_LEDGERS,
+    kind: 'blend_claim', account: run.account, grant_duration_ledgers: grantLedgers(GRANT_LEDGERS),
     owner_wait_ledgers: OWNER_WAIT_LEDGERS, accrual_ledgers: ACCRUAL_LEDGERS,
     position: { pool: p.blend_pool, asset: p.blend_asset, reserve_index: BLEND_POSITION.reserve_index,
       request_type: BLEND_POSITION.request_type, amount: BLEND_POSITION.amount.toString(), claim_ids: [p.blend_claim_id] },

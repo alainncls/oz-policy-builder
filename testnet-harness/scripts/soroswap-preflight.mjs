@@ -7,6 +7,7 @@ import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Address, scValToNative, xdr } from '@stellar/stellar-sdk';
 import { isMainModule } from './cli-entry.mjs';
+import { grantLedgers } from './grant-ledgers.mjs';
 import { i128 } from './lib.mjs';
 import { PROTOCOL_TARGETS, soroswapDecisions } from './protocol-calls.mjs';
 import { parseJsonExact } from './raw-json.mjs';
@@ -76,7 +77,7 @@ export async function prepareSoroswap(run, decisions, overrides = {}) {
   const now = deps.now();
   requireThat(Number.isSafeInteger(now) && now > 0, 'invalid operator clock');
   return { kind: 'soroswap_swap', account: run.account, amount_in: INPUT.toString(), minimum_out: FLOOR.toString(),
-    deadline: Math.floor(now / 1000) + 3600, grant_duration_ledgers: 180, operator_decisions: decided, prerequisites: {
+    deadline: Math.floor(now / 1000) + 3600, grant_duration_ledgers: grantLedgers(180), operator_decisions: decided, prerequisites: {
       observation: 'non_atomic_rpc_reported', router, factory, pair,
       route: [p.native, p.swap_output], quote: { amount_in: INPUT.toString(), amount_out: quote.value[1].toString(), ledger: quote.ledger },
       reserves: { tokens: [token0.value, token1.value], amounts: reserves.value.map(String), ledger: reserves.ledger },

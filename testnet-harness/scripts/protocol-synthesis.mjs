@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { Address, Networks, scValToNative } from '@stellar/stellar-sdk';
+import { MAX_GRANT_LEDGERS, MIN_GRANT_LEDGERS } from './grant-ledgers.mjs';
 import { PINNED_ACCOUNT_WASM } from './rpc.mjs';
 import { PROTOCOL_TARGETS, ROUTER_ADAPTER, ROUTER_DEADLINE_ARG, protocolInvocation, soroswapDecisions } from './protocol-calls.mjs';
 const NETWORK_ID = createHash('sha256').update(Networks.TESTNET).digest('hex');
@@ -54,7 +55,7 @@ export function protocolInputs(run, recording) {
   same(run.walkthrough?.account, run.account, 'plan account');
   const plan = run.walkthrough;
   const horizon = plan.grant_duration_ledgers ?? 1000;
-  requireThat(Number.isInteger(horizon) && horizon >= 30 && horizon <= 1000, 'grant horizon');
+  requireThat(Number.isInteger(horizon) && horizon >= MIN_GRANT_LEDGERS && horizon <= MAX_GRANT_LEDGERS, 'grant horizon');
   const root = protocolInvocation(plan);
   const bundle = recording.bundle;
   same(bundle?.network_id, NETWORK_ID, 'recording network');

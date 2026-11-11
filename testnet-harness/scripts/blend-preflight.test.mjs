@@ -98,7 +98,10 @@ test('Blend preflight records the inspected pool, emission and funding route wit
   assert.equal(plan.funding.minimum_out, BLEND_POSITION.amount.toString());
   assert.equal(plan.funding.deadline, CLOSE + 3600);
   assert.ok(Number.isInteger(plan.accrual_ledgers) && plan.accrual_ledgers >= 1 && plan.accrual_ledgers <= 120);
-  assert.ok(plan.grant_duration_ledgers >= 30 && plan.grant_duration_ledgers <= 1000);
+  assert.equal(plan.grant_duration_ledgers, 300);
+  process.env.OZPB_HARNESS_GRANT_LEDGERS = '30';
+  try { assert.equal((await prepareBlend(fixture().run, fixture().deps)).grant_duration_ledgers, 30, 'a short demonstration run'); }
+  finally { delete process.env.OZPB_HARNESS_GRANT_LEDGERS; }
   const { prerequisites: seen } = plan;
   assert.equal(seen.pool.code_hash, p.blend_code);
   assert.equal(seen.emission.status, 'live');

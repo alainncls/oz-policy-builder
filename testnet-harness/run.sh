@@ -20,6 +20,8 @@
 #   OZPB_NATIVE_WORKER=/abs/ozpb-execution-runtime OZPB_HARNESS_WALKTHROUGH=blend OZPB_HARNESS_AUTHORITY_CHECK=cli OZPB_HARNESS_CONFIRM=operator …
 #                                   # W1: a real Blend claim on a bounded USDC supply the run opens
 #                                   # and withdraws (docs/WALKTHROUGH-PROTOCOLS.md)
+#   OZPB_HARNESS_GRANT_LEDGERS=30 …   # W1/W3: a 30-ledger grant instead of 300/180, so the expiry check
+#                                   # comes within minutes: a run of about five minutes for a demonstration
 #
 # Everything the run produces is kept under `testnet-harness/runs/<UTC timestamp>-<pid>/` (gitignored):
 # run.json (every address and transaction hash), the import bundle, the recording, the spec, the
@@ -47,6 +49,11 @@ case "$WALKTHROUGH" in
         ;;
     soroswap|blend)
         [ "${OZPB_HARNESS_AUTHORITY_CHECK:-}" = cli ] || { echo "$WALKTHROUGH needs OZPB_HARNESS_AUTHORITY_CHECK=cli"; exit 1; }
+        # Optional short grant lifetime for a demonstration run (scripts/grant-ledgers.mjs).
+        if [ -n "${OZPB_HARNESS_GRANT_LEDGERS:-}" ]; then
+            node --input-type=module -e 'import("'"$SCRIPTS"'/grant-ledgers.mjs").then(({ grantLedgers }) => grantLedgers(0)).catch((e) => { console.log(e.message); process.exit(1); })' \
+                || exit 1
+        fi
         # Each rule of the bundle gets its own authority check; there is no terminal prompt per rule.
         [ "${OZPB_HARNESS_CONFIRM:-}" = operator ] || { echo "$WALKTHROUGH needs OZPB_HARNESS_CONFIRM=operator"; exit 1; }
         if [ "$WALKTHROUGH" = soroswap ]; then
@@ -186,8 +193,8 @@ if [ "$WALKTHROUGH" = soroswap ] || [ "$WALKTHROUGH" = blend ]; then
     fi
 
     say "done"
-    echo "  account  https://stellar.expert/explorer/testnet/contract/$(field account)  (owner: $OWNER)"
-    echo "  run      $RUN/run.json"
+    node "$SCRIPTS/run-summary.mjs" --run-dir "$RUN"
+    echo "  run      $RUN/run.json  (owner: $OWNER)"
     exit 0
 fi
 AMOUNT="$(field amount)"
@@ -245,7 +252,7 @@ node "$SCRIPTS/lifecycle.mjs" --run-dir "$RUN"
 node "$SCRIPTS/invoke.mjs" --run-dir "$RUN" --amount "$AMOUNT" --to "$RECIPIENT" --expect deny-account:3000
 
 say "done"
-echo "  account  https://stellar.expert/explorer/testnet/contract/$(field account)  (owner: $OWNER)"
-echo "  policy   https://stellar.expert/explorer/testnet/contract/$(field policy)"
+node "$SCRIPTS/run-summary.mjs" --run-dir "$RUN"
+echo "  policy   https://stellar.expert/explorer/testnet/contract/$(field policy)  (owner: $OWNER)"
 echo "  run      $RUN/run.json"
 echo "  evidence $RUN/evidence.json (written on exit)"

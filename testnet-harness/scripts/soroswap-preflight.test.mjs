@@ -49,6 +49,10 @@ test('Soroswap preflight records inspected route and an explicit fixed positive 
   assert.equal(plan.deadline, 1_700_003_600);
   assert.equal(plan.prerequisites.quote.amount_out, '174580');
   assert.equal(plan.prerequisites.pair.code_hash, 'aa'.repeat(32));
+  assert.equal(plan.grant_duration_ledgers, 180);
+  process.env.OZPB_HARNESS_GRANT_LEDGERS = '40';
+  try { assert.equal((await prepareSoroswap(fixture().run, f.decided, fixture().deps)).grant_duration_ledgers, 40, 'a short demonstration run'); }
+  finally { delete process.env.OZPB_HARNESS_GRANT_LEDGERS; }
   f.run.walkthrough = plan;
   await recheckSoroswapTargets(f.run, f.deps);
   f.control.pairCode = 'bb'.repeat(32);
