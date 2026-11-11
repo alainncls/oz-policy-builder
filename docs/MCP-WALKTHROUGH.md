@@ -307,7 +307,7 @@ Error: OZPB_HTTP_BEARER_TOKEN is required for HTTP mode
 ```
 
 That refusal is the feature. HTTP mode also requires `OZPB_RPC_ALLOWLIST`, binds localhost
-only, and applies bearer auth, a request quota, a request-size bound and a limit on concurrent
+unless `OZPB_HTTP_ALLOWED_HOSTS` names an ingress's public hosts, and applies bearer auth, a request quota, a request-size bound and a limit on concurrent
 builds. `docs/DEVELOPERS.md` has the full set, and what is still owed before anything
 resembling multi-tenant hosting.
 This is the shape a hosted deployment would take. [`docs/SELF-HOSTING.md`](SELF-HOSTING.md)

@@ -227,7 +227,7 @@ pub(crate) async fn serve(
         session::local::LocalSessionManager, StreamableHttpService,
     };
 
-    let allowed_hosts = std::env::var("OZPB_HTTP_ALLOWED_HOSTS").ok();
+    let allowed_hosts = env_var("OZPB_HTTP_ALLOWED_HOSTS")?;
     let (socket, hosts) = listen_policy(addr, allowed_hosts.as_deref())?;
     let bearer = std::env::var("OZPB_HTTP_BEARER_TOKEN")
         .map_err(|_| anyhow::anyhow!("OZPB_HTTP_BEARER_TOKEN is required for HTTP mode"))?;
@@ -260,7 +260,10 @@ pub(crate) async fn serve(
         )?,
         LocalSessionManager::default().into(),
         rmcp::transport::streamable_http_server::StreamableHttpServerConfig::default()
-            .with_allowed_hosts(hosts),
+            .with_allowed_hosts(hosts)
+            // Native MCP clients send no Origin; any browser origin is refused (403), as the
+            // proxy does, also where an ingress stands in for it.
+            .with_allowed_origins([REFUSE_EVERY_ORIGIN]),
     );
     let router = guard(
         axum::Router::new().nest_service(MCP_PATH, service),
@@ -282,7 +285,11 @@ pub(crate) async fn serve(
     Ok(())
 }
 
-/// The `Host` names every listener answers: rmcp's own defaults.
+/// An origin no browser sends: listing only it makes rmcp refuse every request that carries an
+/// `Origin` header, while native clients, which send none, pass.
+const REFUSE_EVERY_ORIGIN: &str = "https://browser-origins-are-refused.invalid";
+
+/// The `Host` names every loopback listener answers: rmcp's own defaults.
 pub(crate) const LOOPBACK_HOSTS: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
 
 /// Parse the bind address and the `Host` names the endpoint answers. Public exposure goes
@@ -300,26 +307,41 @@ pub(crate) fn listen_policy(
     let socket: std::net::SocketAddr = addr
         .parse()
         .map_err(|error| anyhow::anyhow!("invalid HTTP listen address '{addr}': {error}"))?;
-    let mut hosts: Vec<String> = LOOPBACK_HOSTS.iter().map(|host| host.to_string()).collect();
-    match allowed_hosts {
-        None if !socket.ip().is_loopback() => anyhow::bail!(
-            "HTTP listener must bind to loopback unless OZPB_HTTP_ALLOWED_HOSTS names the hosts \
-             an authenticated, TLS-terminating ingress forwards"
-        ),
-        None => {}
-        Some(list) => {
-            for entry in list.split(',').map(str::trim) {
-                if !plain_authority(entry) {
-                    anyhow::bail!(
-                        "OZPB_HTTP_ALLOWED_HOSTS must be a comma-separated list of host[:port] \
-                         names, without wildcards, schemes or paths"
-                    );
-                }
-                hosts.push(entry.to_string());
-            }
+    let mut named = Vec::new();
+    // An empty setting is no setting.
+    for entry in allowed_hosts
+        .filter(|list| !list.trim().is_empty())
+        .map(|list| list.split(',').map(str::trim).collect::<Vec<_>>())
+        .unwrap_or_default()
+    {
+        if !plain_authority(entry) {
+            anyhow::bail!(
+                "OZPB_HTTP_ALLOWED_HOSTS must be a comma-separated list of host[:port] names, \
+                 without wildcards, schemes or paths"
+            );
         }
+        named.push(entry.to_string());
     }
-    Ok((socket, hosts))
+    if socket.ip().is_loopback() {
+        let mut hosts: Vec<String> = LOOPBACK_HOSTS.iter().map(|host| host.to_string()).collect();
+        hosts.extend(named);
+        return Ok((socket, hosts));
+    }
+    // A routable bind answers only the public names the ingress forwards, never loopback ones.
+    let loopback_name = |entry: &String| {
+        let host = entry
+            .rsplit_once(':')
+            .map_or(entry.as_str(), |(host, _)| host);
+        LOOPBACK_HOSTS.contains(&host.to_ascii_lowercase().as_str())
+    };
+    if named.is_empty() || named.iter().all(loopback_name) {
+        anyhow::bail!(
+            "HTTP listener must bind to loopback unless OZPB_HTTP_ALLOWED_HOSTS names the public \
+             hosts an authenticated, TLS-terminating ingress forwards"
+        );
+    }
+    named.retain(|entry| !loopback_name(entry));
+    Ok((socket, named))
 }
 
 /// `host` or `host:port`: letters, digits, dots and hyphens, and a port from 1 to 65535.
@@ -600,23 +622,35 @@ mod tests {
         )
         .expect("named hosts");
         assert_eq!(socket.port(), 8080);
+        // On a routable bind only the named hosts: a caller that reaches the Pod directly
+        // cannot name a loopback host to look like the proxy beside it.
         assert_eq!(
             hosts,
             [
-                "localhost",
-                "127.0.0.1",
-                "::1",
                 "policy-builder-mcp.dev.eu-north-3.gateway.fm",
                 "mcp.example.test:443"
             ]
         );
         // A loopback bind may name them too, for a proxy that keeps the client's Host.
-        assert!(listen_policy("127.0.0.1:8080", Some("mcp.example.test")).is_ok());
+        let (_, hosts) =
+            listen_policy("127.0.0.1:8080", Some("mcp.example.test")).expect("loopback");
+        assert_eq!(hosts, ["localhost", "127.0.0.1", "::1", "mcp.example.test"]);
+        // An empty setting is no setting; a routable bind then still needs real names.
+        assert_eq!(
+            listen_policy("127.0.0.1:8080", Some("")).expect("empty").1,
+            LOOPBACK_HOSTS
+        );
+        for loopback_only in ["", "localhost", "127.0.0.1, ::1"] {
+            let error =
+                listen_policy("0.0.0.0:8080", Some(loopback_only)).expect_err(loopback_only);
+            assert!(
+                error.to_string().contains("OZPB_HTTP_ALLOWED_HOSTS"),
+                "{loopback_only:?}: {error}"
+            );
+        }
         // Anything that is not a plain host[:port] list is refused: no wildcard, scheme, path,
         // empty entry or space, since rmcp would otherwise read an empty list as "any host".
         for bad in [
-            "",
-            " ",
             "*",
             "*.example.test",
             "https://mcp.example.test",

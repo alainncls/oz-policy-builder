@@ -104,6 +104,17 @@ fn post(server: &Server, bearer: Option<&str>, body: &str) -> u16 {
 
 /// The same, naming `host` in the request's `Host` header, as an ingress forwarding it would.
 fn post_as(server: &Server, host: &str, bearer: Option<&str>, body: &str) -> u16 {
+    post_with(server, host, bearer, None, body)
+}
+
+/// The same, with an `Origin` header if given, as a browser would send.
+fn post_with(
+    server: &Server,
+    host: &str,
+    bearer: Option<&str>,
+    origin: Option<&str>,
+    body: &str,
+) -> u16 {
     // A wildcard bind is reached on loopback.
     let target = server.addr.replace("0.0.0.0", "127.0.0.1");
     let mut stream = TcpStream::connect(&target).expect("connect");
@@ -112,7 +123,10 @@ fn post_as(server: &Server, host: &str, bearer: Option<&str>, body: &str) -> u16
     stream.set_write_timeout(timeout).expect("write timeout");
     let authorization = bearer
         .map(|token| format!("Authorization: Bearer {token}\r\n"))
-        .unwrap_or_default();
+        .unwrap_or_default()
+        + &origin
+            .map(|origin| format!("Origin: {origin}\r\n"))
+            .unwrap_or_default();
     // One write, so a server that answers 401 or 429 without reading the body has the whole
     // request in its buffer rather than a half-sent one it resets.
     let request = format!(
@@ -261,5 +275,51 @@ fn a_routable_listener_needs_the_ingress_hosts_and_answers_only_those() {
         post_as(&server, "other.example.test", Some(TOKEN), INITIALIZE),
         403,
         "a host the ingress does not forward"
+    );
+    assert_eq!(
+        post_as(&server, "localhost", Some(TOKEN), INITIALIZE),
+        403,
+        "a loopback name from a caller that reached the Pod directly"
+    );
+    assert_eq!(
+        post_as(&server, "MCP.Example.TEST", Some(TOKEN), INITIALIZE),
+        200,
+        "any case"
+    );
+    assert_eq!(
+        post_as(&server, "other.example.test", None, INITIALIZE),
+        401,
+        "no token first"
+    );
+    assert_eq!(
+        post_with(
+            &server,
+            "mcp.example.test",
+            Some(TOKEN),
+            Some("https://evil.example"),
+            INITIALIZE
+        ),
+        403,
+        "a browser origin"
+    );
+}
+
+#[test]
+fn a_browser_origin_is_refused_on_the_loopback_listener_too() {
+    let server = start("10", "4096");
+    assert_eq!(
+        post_with(
+            &server,
+            &server.addr.clone(),
+            Some(TOKEN),
+            Some("http://localhost:3000"),
+            INITIALIZE
+        ),
+        403
+    );
+    assert_eq!(
+        post(&server, Some(TOKEN), INITIALIZE),
+        200,
+        "native clients send no Origin"
     );
 }

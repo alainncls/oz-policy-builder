@@ -134,11 +134,18 @@ are not supplied by this shared-token configuration.
 A platform that terminates TLS itself, such as a Kubernetes ingress, can reach the API directly
 and leave the proxy out. Set `OZPB_HTTP_LISTEN` (for example `0.0.0.0:8080`) and
 `OZPB_HTTP_ALLOWED_HOSTS` to the public host names the ingress forwards (comma-separated
-`host[:port]`, no wildcards). The server refuses a routable listen address without the host
-list, and answers only those hosts and loopback (`403` otherwise). The bearer token, request
-quota, body bound and build limits apply unchanged. What the proxy did becomes the ingress's
-job: TLS with a certificate the clients trust, refusing paths other than `/v1/mcp` and
-browser-origin requests, and keeping request bodies and headers out of its access logs.
+`host[:port]`, no wildcards or IPv6 literals). The Compose file passes neither: it runs the
+proxy mode above. The server refuses a routable listen address unless the list names a host
+that is not loopback, and then answers authenticated requests for those hosts only (`403` for
+any other `Host`, loopback names included). It refuses any request carrying an `Origin` header
+(`403`) in either mode, as the proxy does. The bearer token, request quota, body bound and build
+limits apply unchanged.
+
+The `Host` check is not access control: whoever reaches the listen address can name the public
+host. Between the ingress and the API the token travels in plain HTTP and is the only control,
+so allow only the ingress controller to reach that port (on Kubernetes, a NetworkPolicy). What
+the proxy did becomes the ingress's job: TLS with a certificate the clients trust, refusing paths
+other than `/v1/mcp`, and keeping request bodies and headers out of its access logs.
 
 The API has a 2-CPU, 4-GiB memory, 256-process ceiling; the proxy has 0.5 CPU, 128 MiB and
 64 processes. Both run as UID 10001 with no added capabilities, no privilege escalation and
