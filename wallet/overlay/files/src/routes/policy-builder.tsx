@@ -651,12 +651,12 @@ function PolicyBuilder() {
         {state?.livePreview && <div className="flex flex-wrap gap-3">
           <button className={button} disabled={busy || !open("live", state.livePreview)}
             onClick={() => void run((value) => value.consentLive(), "Approve with your passkey. The wallet then simulates both cases on testnet…",
-              "Live check done. Wait about 2.5 minutes for its signatures to expire, then Check that the live-check signatures were not used.")}>I consent: sign the installation with my owner passkey and simulate both cases</button>
+              "Live check done. Wait about a minute for its signatures to expire, then Check that the live-check signatures were not used.")}>I consent: sign the installation with my owner passkey and simulate both cases</button>
           <button className={button} disabled={busy}
             onClick={() => void run((value) => value.cancelLive(), "Cancelling…", "Cancelled. Nothing was signed.")}>Cancel live check</button>
         </div>}
         {state?.status?.capabilities.liveCheck && <>
-          <p className="text-sm text-slate-300">After the live check, its signatures stay valid for about 2.5 minutes. Then check that nobody
+          <p className="text-sm text-slate-300">After the live check, its signatures stay valid for about a minute. Then check that nobody
             used them; installation waits for this.</p>
           <button className={button} disabled={busy || !state?.review}
             onClick={() => void run((value) => value.checkReplay(), "Checking that the live-check signatures were not used…", replayDone)}>Check that the live-check signatures were not used</button>

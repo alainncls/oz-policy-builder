@@ -8,7 +8,7 @@ import { installCall } from '../shared/assembly.mjs';
 /**
  * How old, in ledgers, the captured and live evidence may be when an installation reads the
  * ledger, at assembly and again before the fee payer submits (about 30 minutes at 5 s a ledger).
- * The live check's signatures alone keep an installation waiting 30 ledgers.
+ * The live check's signatures alone keep an installation waiting 12 ledgers.
  */
 export const INSTALL_EVIDENCE_MAX_AGE_LEDGERS = 360;
 const LAYERS = ['reference', 'account_wasm', 'captured_target', 'live_enforcement'];

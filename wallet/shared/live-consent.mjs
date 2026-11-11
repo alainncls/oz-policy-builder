@@ -20,10 +20,15 @@ import { liveCase } from './live-enforcement.mjs';
 
 /** The reviewed helper Wasm (`EXPECTED_HELPER_HASH` in execution-runtime/tests/atomic_helper.rs). */
 export const LIVE_HELPER_WASM = '0d0128a499f20bb176b64232d6c1d047311b23081b882c4c487072bf9a355e94';
-/** How far past the ledger read at preparation the case signatures stay valid: about two and a half minutes. */
-export const LIVE_SIGNATURE_LEDGERS = 30;
+/**
+ * How far past the ledger read at preparation the case signatures stay valid: about one minute.
+ * Installation waits until they expired unused, so the window is as short as a fast RPC allows:
+ * the owner consents within the first four ledgers, and the passkey and both simulations fit in
+ * the rest (`LIVE_CONSENT_MIN_LEDGERS`, `LIVE_RUN_MIN_LEDGERS`).
+ */
+export const LIVE_SIGNATURE_LEDGERS = 12;
 /** Consent is refused, before anything signable exists, unless at least this many ledgers remain. */
-export const LIVE_CONSENT_MIN_LEDGERS = 15;
+export const LIVE_CONSENT_MIN_LEDGERS = 8;
 /** Each simulation starts only with at least this many ledgers left before the signatures expire. */
 export const LIVE_RUN_MIN_LEDGERS = 3;
 /** The largest permit amount whose adjacent denial the helper still executes. */

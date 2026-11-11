@@ -19,7 +19,7 @@ test('delegate capabilities stay in backend memory and sign only for their own r
   assert.ok(Keypair.fromPublicKey(created.address));
   const signer = capabilities.offline(created.capabilityId, created.address);
   const live = capabilities.live(created.capabilityId, created.address, { consent: 'c'.repeat(64), network_id: NETWORK_ID,
-    account: POLICY, recipient: Keypair.random().publicKey(), expected_rule_id: 1, signature_expiration_ledger: 130, read_ledger: 100,
+    account: POLICY, recipient: Keypair.random().publicKey(), expected_rule_id: 1, signature_expiration_ledger: 110, read_ledger: 100,
     amounts: ['1000000', '1000001'] });
   assert.equal(typeof signer.sign, 'undefined', 'no raw signing of supplied bytes');
   assert.throws(() => signer.signPreimage(Buffer.alloc(32, 7).toString('base64'), {}), /refused/);

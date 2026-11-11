@@ -21,10 +21,10 @@ const LEDGER_MS = 5_000;
 // A submission still has to reach the backend before the backend's own deadline.
 const MARGIN_MS = 5_000;
 // Ledger bounds the backend checks again when the owner approves: the sample's owner read may be at
-// most 12 ledgers old (shared/sample.mjs); live consent needs 15 ledgers of signature validity left,
+// most 12 ledgers old (shared/sample.mjs); live consent needs 8 ledgers of signature validity left,
 // and the run 3 (shared/live-consent.mjs).
 const OWNER_READ_LEDGERS = 12;
-const LIVE_CONSENT_MIN_LEDGERS = 15;
+const LIVE_CONSENT_MIN_LEDGERS = 8;
 const LIVE_RUN_MIN_LEDGERS = 3;
 
 /** The route supplies the real validators; only serialized XDR crosses SDK versions. */

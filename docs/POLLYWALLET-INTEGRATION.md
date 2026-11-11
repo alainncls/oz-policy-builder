@@ -242,7 +242,7 @@ preparation.
 Every prepared review shows the seconds it stays open, and the browser stops offering it before
 the backend would refuse it: the action's 120 seconds, counted from before the request, or sooner
 where approval checks a ledger bound again, less five seconds for the submission to arrive. The
-sample's owner read may be at most 12 ledgers old; live consent needs 15 ledgers of signature
+sample's owner read may be at most 12 ledgers old; live consent needs 8 ledgers of signature
 validity left, and the run 3. The browser counts a testnet ledger as five seconds (200 consecutive
 ledgers measured on 10 November 2026), so a sample review stays open for about 50 seconds. A
 window closes on the wall clock too, because ledgers keep closing while a sleeping computer's
@@ -431,8 +431,10 @@ two named cases, not the derived deny suite.
    `NextId`, and the candidate's installation marker for the next rule ID, which must be the one
    the review established. It reads back the delegate's classic testnet account, which must be
    signable by its master key alone, and creates it through Friendbot if it is missing. It then
-   fixes the expiry ledger N, 30 ledgers
-   (about two and a half minutes) after the latest ledger, and returns the consent statement.
+   fixes the expiry ledger N, 12 ledgers (about one minute) after the latest ledger, and returns
+   the consent statement. The window is short because installation waits until it has passed: the
+   owner has about 20 seconds to consent, and the passkey and both simulations the rest, which a
+   fast RPC (under a second a request) allows.
    Nothing is signed, and nothing signable has been released.
 2. **Consent.** The browser derives the statement itself from the reviewed grant and the
    backend's inputs (helper, candidate hash, rule ID, ledgers) and shows it: both exact calls,
@@ -442,7 +444,7 @@ two named cases, not the derived deny suite.
    none of them names the helper; all of them reach the operator's RPC endpoint inside the
    simulation requests; and the replay check after N compares the account with the state read
    before they existed. Consent returns the statement's SHA-256. The backend accepts it only for
-   the statement it prepared and only while at least 15 ledgers remain before N. Only then does
+   the statement it prepared and only while at least 8 ledgers remain before N. Only then does
    it journal the replay obligation (below) and release the unsigned owner entry with a fresh
    nonce. The browser checks that entry is exactly the reviewed installation before the passkey
    sees it.

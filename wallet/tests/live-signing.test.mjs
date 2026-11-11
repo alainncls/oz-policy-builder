@@ -5,6 +5,7 @@ import { Address, Asset, Keypair, Networks, StrKey, hash, xdr } from '@stellar/s
 import { DelegateCapabilities } from '../server/native-execution.mjs';
 import { offlineCapability, offlineDomain } from '../server/native-protocol.mjs';
 import { LIVE_MAX_AMOUNT, LIVE_NETWORK_IDS, createLiveCapability } from '../server/live-signing.mjs';
+import { LIVE_SIGNATURE_LEDGERS } from '../shared/live-consent.mjs';
 
 const vector = JSON.parse(readFileSync(new URL('../../docs/examples/native-domain-vector.json', import.meta.url)));
 const sha256 = (bytes) => Buffer.from(hash(bytes));
@@ -16,7 +17,7 @@ const RECIPIENT = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 22)).publicKey();
 
 function approved(change = {}) {
   return { network_id: TESTNET, account: ACCOUNT, recipient: RECIPIENT, expected_rule_id: 1, signature_expiration_ledger: 5400000,
-    read_ledger: 5399980, amounts: ['1000000', '1000001'], ...change };
+    read_ledger: 5399990, amounts: ['1000000', '1000001'], ...change };
 }
 function structure(change = {}) {
   return { network_id: TESTNET, account: ACCOUNT, asset: SAC, recipient: RECIPIENT, amount: '1000000',
@@ -128,7 +129,7 @@ test('live capability signs only the bounded transfer it can describe, for exact
   delete missing.nonce;
   assert.throws(() => live.authorizeTransfer(missing), /refused/);
   // The consented check itself is bounded: a short expiry after the read ledger and the adjacent amount.
-  for (const change of [{ read_ledger: 5399969 }, { read_ledger: 5400000 }, { amounts: ['5', '7'] }, { amounts: ['7', '6'] },
+  for (const change of [{ read_ledger: 5400000 - LIVE_SIGNATURE_LEDGERS - 1 }, { read_ledger: 5400000 }, { amounts: ['5', '7'] }, { amounts: ['7', '6'] },
     { amounts: ['1000000', '1000002'] },
     { amounts: ['1000001', '1000002'] }, { amounts: ['1000000'] }, { expected_rule_id: 0 }, { consent: 'a'.repeat(64) }]) {
     assert.throws(() => createLiveCapability(counted.key, approved(change)), /refused/, JSON.stringify(change));
