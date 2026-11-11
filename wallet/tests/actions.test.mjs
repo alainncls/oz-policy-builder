@@ -27,6 +27,27 @@ test(`wrong fresh owner ${change.name ? 'name type' : 'rule ID'} never triggers 
   assert.ok(!calls.includes('fund-account'));
 });
 }
+test('a new account\'s owner rule read from a node behind its deployment is asked again, not refused', async () => {
+  const { actions, network, calls, f } = setup();
+  const ledgers = [];
+  network.view = async () => {
+    // A node behind the account's deployment (ledger 124) either fails the call, not knowing the
+    // contract yet, or answers from an earlier ledger.
+    ledgers.push(ledgers.length);
+    if (ledgers.length === 1) throw new Error('wallet network operation refused');
+    const ledger = ledgers.length === 2 ? 123 : 124;
+    return { value: xdr.ScVal.fromXDR(f.ruleXdr({ id: xdr.ScVal.scvU32(0) }), 'base64'), ledger };
+  };
+  const preview = await actions['prepare-account']({ credentialId: f.wallet.credentialId, publicKey: f.wallet.publicKey });
+  const result = await actions['confirm-account']({ id: preview.action.id });
+  assert.deepEqual(result.wallet, f.wallet);
+  assert.equal(ledgers.length, 3, 'asked until a node at the deployment answered');
+  const g = setup();
+  g.network.view = async () => ({ value: xdr.ScVal.fromXDR(g.f.ruleXdr({ id: xdr.ScVal.scvU32(0) }), 'base64'), ledger: 123 });
+  const again = await g.actions['prepare-account']({ credentialId: g.f.wallet.credentialId, publicKey: g.f.wallet.publicKey });
+  await assert.rejects(() => g.actions['confirm-account']({ id: again.action.id }), /refused/, 'a node that never catches up');
+  assert.ok(!g.calls.includes('fund-account'));
+});
 test('recording and synthesis accept no caller RPC, paths, current ledger, or invented runtime result', async () => {
   const { actions, calls, f } = setup();
   await actions.record({ wallet: f.wallet, transactionHash: 'a'.repeat(64) });

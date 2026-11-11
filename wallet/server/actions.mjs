@@ -288,7 +288,11 @@ export function createWalletActions({ session, toolchain, network, native = null
         const signer = xdr.ScVal.scvVec([xdr.ScVal.scvSymbol('External'), new Address(verifier.contractId).toScVal(),
           xdr.ScVal.scvBytes(credential(selected))]);
         const account = await network.create(ACCOUNT_WASM, [xdr.ScVal.scvVec([signer]), xdr.ScVal.scvMap([])], 'deploy-account');
-        const observed = await network.view(account.contractId, 'get_context_rule', [xdr.ScVal.scvU32(0)]);
+        // From a node at or past the deployment: one behind it does not know the account yet, so its
+        // failed call is asked again too, a few times.
+        const observed = await readAfter(async () => {
+          try { return await network.view(account.contractId, 'get_context_rule', [xdr.ScVal.scvU32(0)]); } catch { return { ledger: -1 }; }
+        }, account.receipt.ledger);
         if (observed.ledger < account.receipt.ledger || observed.ledger - account.receipt.ledger > 12) refuse();
         freshOwner(observed.value, signer);
         const funded = await network.submitOperation(Operation.invokeContractFunction({
