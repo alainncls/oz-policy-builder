@@ -46,6 +46,9 @@ export interface WalletState {
   readonly replacementPending: Details | null;
   readonly replacement: Details | null;
   readonly proposalReview: ProposalReview | null;
+  /** The automation key's one real use of the installed grant, and the same payment tried again (simulated). */
+  readonly grantUse: Details | null;
+  readonly grantRepeat: Details | null;
   /** When each prepared review stops being offered, in ms on the controller's monotonic clock. */
   readonly windows: Readonly<Record<string, number>>;
 }
@@ -111,6 +114,8 @@ export class WalletController {
   cancelInstall(): void;
   install(): Promise<void>;
   monitorGrant(): Promise<void>;
+  useGrant(): Promise<void>;
+  tryGrantAgain(): Promise<void>;
   prepareReplacement(): Promise<void>;
   cancelReplacement(): void;
   confirmReplacement(): Promise<void>;

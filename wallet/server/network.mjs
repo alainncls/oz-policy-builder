@@ -500,6 +500,28 @@ export class WalletNetwork {
     } catch { refuse(); }
   }
   /**
+   * The generated policy's `CallCount(account, ruleId)`: how many calls this installation has used.
+   * `null` when the entry does not exist (the policy is not installed for that rule). One request.
+   */
+  async callCount({ account, policy, ruleId }) {
+    try {
+      if (!StrKey.isValidContract(account) || !StrKey.isValidContract(policy) || account === policy
+        || !Number.isSafeInteger(ruleId) || ruleId < 0 || ruleId > 0xffffffff) refuse();
+      await this.assertTestnet();
+      const key = xdr.LedgerKey.contractData(new xdr.LedgerKeyContractData({ contract: new Address(policy).toScAddress(),
+        key: xdr.ScVal.scvVec([xdr.ScVal.scvSymbol('CallCount'), new Address(account).toScVal(), xdr.ScVal.scvU32(ruleId)]),
+        durability: xdr.ContractDataDurability.persistent }));
+      const response = await this.#server.getLedgerEntries(key);
+      const observed = ledger(response.latestLedger);
+      const entries = response.entries ?? [];
+      if (entries.length > 1 || entries.some((item) => !same(item.key, key))) refuse();
+      if (!entries.length) return { ledger: observed, count: null };
+      const value = entries[0].val?.type === 'contractData' ? entries[0].val.contractData.val : refuse();
+      if (value.type !== 'scvU32') refuse();
+      return { ledger: observed, count: value.u32 };
+    } catch { refuse(); }
+  }
+  /**
    * The wallet's automation delegate as a classic testnet account, which the host needs to check its
    * signature: created through Friendbot if it does not exist yet (a testnet write that costs the fee
    * payer nothing), then read back with its master key alone able to sign. At most once per address.
@@ -568,6 +590,10 @@ export class WalletNetwork {
   /** The same obligation for an unsigned installation entry released to the browser for the passkey. */
   recordInstallObligation(record) {
     this.#save(++this.#serial, 'install-release', record);
+  }
+  /** A spent grant tried again: the simulation's verdict, public addresses and ledgers only. Nothing was sent. */
+  recordRepeatedUse(record) {
+    this.#save(++this.#serial, 'repeat-use', record);
   }
   /**
    * The owner's unsigned `remove_context_rule(ruleId)` for `wallet`, drafted as the sample transfer

@@ -44,7 +44,7 @@ export function offlineDomain(binding) {
  * canonical `HashIdPreimage::SorobanAuthorization` whose network is the execution network it derives
  * itself from `binding`, never a digest or other bytes. That network is never mainnet, testnet,
  * futurenet or the source network (`offlineDomain`), so nothing it signs is valid on a live network;
- * the live capability (live-signing.mjs) is the only one that signs testnet authorizations.
+ * the live and use capabilities (live-signing.mjs) are the only ones that sign testnet authorizations.
  */
 export function offlineCapability(key) {
   const address = key.publicKey();

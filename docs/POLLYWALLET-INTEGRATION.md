@@ -18,8 +18,9 @@ the reviewed grant. When the operator names the deployed [atomic live helper](AT
 the owner can also consent to a [live-enforcement check](#live-enforcement-check): two
 enforce-mode simulations on testnet, never submitted. When all four layers passed on recent
 evidence and the live check's signatures expired unused, the owner can [install](#installation)
-the reviewed grant with one passkey-signed transaction and later [revoke](#revocation) it with
-another. [Revoke-first replacement](#revoke-first-replacement) is available for verified
+the reviewed grant with one passkey-signed transaction, watch the automation delegate
+[use it](#using-the-grant) once with no passkey and the same payment then refused by the policy's
+call cap, and [revoke](#revocation) it with another passkey-signed transaction. [Revoke-first replacement](#revoke-first-replacement) is available for verified
 session-local grants, and [on-demand monitoring](#on-demand-installed-grant-monitoring) is
 available within the scope below. A virtual authenticator's signature is automation evidence,
 not a human acceptance decision.
@@ -273,10 +274,11 @@ costs the fee payer nothing: the authority review refuses a grant whose delegate
 exist, and the host checks the delegate's signatures against that account. If that account cannot
 be created, the key is dropped and its slot freed, so the step can be retried. Use that address as the grant's restricted delegate. The owner passkey never stands in for
 it, and a grant naming any other delegate address cannot run these checks. The key never signs
-supplied bytes. It signs through two capabilities only, each refusing the other's network: the
-offline capability signs authorization preimages in the derived offline execution network, and
-the [live capability](#live-enforcement-check) builds and signs the two testnet transfers of one
-consented live check.
+supplied bytes. It signs through three capabilities only. The offline capability signs
+authorization preimages in the derived offline execution network and refuses testnet. The
+[live capability](#live-enforcement-check) builds and signs the two testnet transfers of one
+consented live check. The [use capability](#using-the-grant) builds and signs one use of an
+installed one-call grant on testnet. The two testnet capabilities refuse every other network.
 
 `Run local execution checks` runs this layer and then the
 [captured-target layer](#captured-target-execution) from one CLI preparation, so both report the
@@ -648,6 +650,58 @@ Before installing again after a restart, the operator:
 An installation that needs a separate restoration transaction is refused. Restore the archived
 entries, then review again.
 
+## Using the grant
+
+Once a one-call exact native transfer is installed and verified, section 8 of the page shows what
+the grant is for: the automation delegate acting alone. Neither step asks for the owner's passkey.
+
+`Pay with the automation key` (`use-grant`) makes the granted payment once, for real:
+
+1. The backend reads, each from a node at or past one ledger: the installed rule, which must read
+   back exactly as recorded; the policy's `CallCount(account, rule)`, which must be 0; that the
+   recipient exists and the account's balance covers the amount; and the fee payer's sequence. A
+   counter already above 0 means someone else used the grant with the delegate's signatures:
+   refused as `grant_already_used`, with nothing signed. Reads that leave fewer than 15 ledgers of
+   the signatures' window are refused as `rpc_too_slow` before anything is signed.
+2. The delegate's use capability builds and signs both of its entries for exactly
+   `transfer(account, recipient, amount)` on the testnet native asset, checked under exactly
+   `[rule]` and signed by `Delegated(delegate)`, as the live check builds them. Their signatures
+   expire 30 ledgers after the ledger read in step 1 (`USE_SIGNATURE_LEDGERS`), before the grant
+   does. The capability signs once.
+3. The fee payer's envelope is valid only below that expiry ledger, so it cannot land, and fail,
+   after the signatures expire. It is sent only while at least 15 of those ledgers remain
+   (`USE_SUBMIT_MIN_LEDGERS`); otherwise nothing is sent and the step can be tried again.
+4. The fee payer enforce-simulates, signs and submits once, as for every submission. The use is
+   recorded `used` only with the native asset's one `transfer` event from the account to the
+   recipient for exactly the amount, and the policy's counter read at 1 from a node at or past the
+   payment's ledger. A confirmed payment that fails those checks stays listed in `status` as
+   `confirmed_unverified`.
+
+A use that may have reached the network is never attempted again. A send whose result is uncertain
+leaves the fee payer unable to submit anything else in this session, revocation included, as for
+any submission. A refusal that leaves the fee payer able to submit sent no transaction, and the use
+can be tried again. Its signed entries did reach the operator's RPC inside the enforce-mode
+simulation and stay valid until they expire; the policy's one use bounds what they can do, and
+whoever spends it first makes every later use `grant_already_used`. The delegate signs at most
+three uses per installation.
+
+`Try the same payment again` (`try-grant-again`), after a verified use, signs the same transfer
+under fresh signatures with the same bounds, reads the counter at 1 first, and only simulates it in
+enforce mode. It is never submitted. Only an answer from a node at or past the payment's ledger is
+judged. The result counts as the call cap refusing only when the response is the generated
+policy's own `CallCountExceeded` (7). That code must come from the account's authentication of
+exactly this envelope's entry, in the printed log and in the structured events, with the same
+attribution rules as a [live denial](#live-enforcement-check). A permit of exactly this envelope
+(its entries echoed, a successful record of this transfer and this entry's check) is recorded as
+the cap not holding (`permitted`). Either is the verdict, recorded once per use. Any other answer
+settles nothing and the try may be made again, three signatures at most. Those signatures stay
+valid for up to 30 ledgers and reach the operator's RPC inside the simulation request. While the
+use is spent the policy refuses them; after a `permitted` verdict they could move funds until they
+expire, so the page asks for revocation at once.
+
+The journal records the payment like every submission (stage `use-grant`) and the second try's
+verdict as a `repeat-use` entry: public addresses, ledgers and the verdict only.
+
 ## Revocation
 
 `Prepare revocation` (`prepare-revoke`) is offered for an installation from this session:
@@ -706,6 +760,7 @@ cannot be repeated in the session, whatever the cause.
 | `signatures_still_valid` | Signatures the wallet released earlier, by a live check or an installation entry, have not expired yet; wait for their ledger. |
 | `account_changed` | The replay check found the account changed while released signatures were valid. |
 | `review_expired` | The prepared action is no longer available, in the backend or in this browser: it expired or was already used. |
+| `grant_already_used` | The policy counted a use of the installed grant that this page did not make; nothing was signed or sent. Revoke the grant. |
 
 The installation section shows the last ledger at which this review's evidence is still accepted
 (`installDeadline`), from the captured and live evidence the browser already holds. Submission
@@ -765,7 +820,10 @@ Toolkit tests exercise session authentication, one-shot state, transport limits,
 and signature checks, and the client controller's refusal paths. The installation and
 revocation tests drive all four layers with a fake worker and RPC, then the gate, the replay
 obligations, the authority recheck, single submission, and the event and read-back checks
-against receipts in the shapes testnet returns. They are fixture evidence, not a testnet run. The apply-script tests cover
+against receipts in the shapes testnet returns. The grant-use tests take that installation through
+one use by the delegate (single submission, the transfer event, the counter from 0 to 1) and the
+second try, judged against synthesized enforce-mode responses: the call cap's refusal, a permit,
+another policy code, and responses bound to another envelope. They are fixture evidence, not a testnet run. The apply-script tests cover
 immutable inputs, dirty/different upstream checkouts, symlinks, missing lock metadata, and
 binary/rename patches that omit ordinary text headers.
 

@@ -34,7 +34,8 @@ export class WalletController {
     review: null, accountPreview: null, deployPreview: null, installation: null, receipt: null,
     sample: null, samplePreview: null, sampleTransactionHash: null, sampleAttempted: false, delegate: null, livePreview: null,
     replay: null, installPreview: null, installAttempted: false, installRuleId: null, revokePreview: null, revokeAttempted: false,
-    removal: null, monitor: null, replacementPreview: null, replacementPending: null, replacement: null, installOwner: null, proposalReview: null, agent: null, agentStale: null, windows: {}, busy: false });
+    removal: null, monitor: null, replacementPreview: null, replacementPending: null, replacement: null, installOwner: null, proposalReview: null, agent: null, agentStale: null,
+    grantUse: null, grantRepeat: null, windows: {}, busy: false });
   constructor({ request, validators, sign, origin, pins, onChange = () => {},
     pause = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); }), now = () => performance.now(), wall = () => Date.now() }) {
     this.#request = request; this.#validators = validators; this.#sign = sign;
@@ -48,7 +49,8 @@ export class WalletController {
     installPreview: null, revokePreview: null, replacementPreview: null }); }
   #clearLifecycle() { this.#set({ installation: null, receipt: null, installOwner: null,
     installPreview: null, installAttempted: false, installRuleId: null, revokePreview: null,
-    revokeAttempted: false, removal: null, monitor: null, replacementPreview: null, replacementPending: null, replacement: null }); }
+    revokeAttempted: false, removal: null, monitor: null, replacementPreview: null, replacementPending: null, replacement: null,
+    grantUse: null, grantRepeat: null }); }
   #clearSample() { this.#set({ sample: null, samplePreview: null, sampleTransactionHash: null, sampleAttempted: false }); }
   async #act(operation) {
     if (this.#busy) throw refused();
@@ -110,7 +112,20 @@ export class WalletController {
       const listed = this.#confirmed(installRuleId);
       if (listed) this.#set({ installation: listed });
     }
+    // A payment by the automation key whose response never arrived is adopted once the backend lists it.
+    if (this.#state.installation && !this.#state.grantUse && this.#state.delegate) {
+      const listed = (status.installations ?? []).find((item) => item?.installationId === this.#state.installation.installationId);
+      if (listed?.use?.status === 'used' && this.#usedExactly(listed.use)) this.#set({ grantUse: listed.use });
+    }
     return status;
+  }
+  /** Exactly one use of this session's installation by this session's delegate, the counter from 0 to 1. */
+  #usedExactly(use) {
+    const { installation, delegate } = this.#state, count = use?.callCount;
+    return use?.status === 'used' && use.installationId === installation?.installationId && use.ruleId === installation.ruleId
+      && use.delegate === delegate?.address && use.signedBy === 'automation_delegate_only' && use.ownerAsked === false
+      && HASH.test(use.transactionHash ?? '') && count?.before === 0 && count.after === 1 && count.max === 1
+      && /^[1-9][0-9]{0,18}$/.test(use.amountStroops ?? '');
   }
   /** The backend serves one request at a time: while it still works on a lost request, ask again. */
   async #statusWhenFree() {
@@ -618,6 +633,49 @@ export class WalletController {
         || (result.status === 'unchanged' && (result.reasons.length !== 0
           || result.projectedAuthorityCommitment !== result.expectedAuthorityCommitment))) throw refused();
       this.#set({ monitor: result });
+    });
+  }
+  /**
+   * The automation key uses this session's installed grant once, for real and alone: no passkey is
+   * asked. Accepted only as exactly one use of this installation's rule by this session's delegate,
+   * with the policy's counter read at 1 after the payment.
+   */
+  async useGrant() {
+    return this.#act(async () => {
+      await this.#status(); this.#capability('grantUse');
+      const { installation, delegate, removal, revokeAttempted, grantUse } = this.#state;
+      if (!installation || !delegate || removal || revokeAttempted || grantUse) throw refused();
+      let result;
+      try {
+        result = await this.#request('use-grant', { installationId: installation.installationId, capabilityId: delegate.capabilityId });
+      } catch (error) {
+        // A use the backend lists as confirmed cannot be tried again; its reason is not passed on.
+        await this.#statusWhenFree();
+        const listed = (this.#state.status?.installations ?? []).find((item) => item?.installationId === installation.installationId);
+        throw listed?.use ? refused() : error;
+      }
+      const use = result?.use;
+      if (!this.#usedExactly(use) || result.receipt?.hash !== use.transactionHash) throw refused();
+      this.#set({ grantUse: use, receipt: result.receipt });
+      await this.#status().catch(() => {});
+    });
+  }
+  /** The same payment again after the use: simulated only, and judged by the backend; a refusal counts only as the cap. */
+  async tryGrantAgain() {
+    return this.#act(async () => {
+      await this.#status(); this.#capability('grantRepeat');
+      const { installation, delegate, removal, grantUse, grantRepeat } = this.#state;
+      // A refusal by the cap, or a permit, is the verdict; another answer may be asked again.
+      if (!installation || !delegate || removal || grantUse?.status !== 'used'
+        || grantRepeat?.outcome === 'deny' || grantRepeat?.reason === 'permitted') throw refused();
+      const result = await this.#request('try-grant-again', { installationId: installation.installationId, capabilityId: delegate.capabilityId });
+      await this.#status().catch(() => {});
+      const repeat = result?.repeat;
+      const denied = repeat?.outcome === 'deny' && repeat.reason === 'call_count_exceeded' && repeat.code === 7 && repeat.submitted === false
+        && repeat.usedBy === grantUse.transactionHash;
+      const failed = repeat?.outcome === 'failed' && typeof repeat.reason === 'string';
+      if (!denied && !failed) throw refused();
+      this.#set({ grantRepeat: repeat });
     });
   }
   async prepareReplacement() {

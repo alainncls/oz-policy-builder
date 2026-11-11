@@ -645,3 +645,161 @@ export function validateLiveCase(input) {
     return freezeCopy({ outcome: 'failed', reason: 'malformed', detail: 'the simulation or its authorizations did not decode' });
   }
 }
+
+// --- a second use of an installed one-use grant -------------------------------------------------------
+//
+// After the automation delegate used an installed grant once for real, the same transfer is signed
+// again (fresh nonces) and simulated in enforce mode, never submitted. Its refusal counts only as
+// the generated policy's own `CallCountExceeded` (7), raised inside the account's authentication of
+// this envelope's transfer entry, under the same attribution rules as a live denial above: the
+// printed log and the structured events agree, every event comes from a failed call, the call is
+// exactly the asset's `transfer` and the account's one recorded check is this entry's.
+
+/** The generated policy's `CallCountExceeded`: this installation has used every call it was granted. */
+export const CALL_COUNT_EXCEEDED = 7;
+
+function useCase(intent) {
+  const c = intent;
+  const contract = (text) => typeof text === 'string' && StrKey.isValidContract(text);
+  const classic = (text) => typeof text === 'string' && StrKey.isValidEd25519PublicKey(text);
+  if (!c || typeof c !== 'object' || c.network_id !== NETWORK_ID || !contract(c.account) || !contract(c.policy) || !classic(c.delegate)
+    || !(contract(c.recipient) || classic(c.recipient)) || typeof c.amount !== 'string' || !/^[1-9][0-9]{0,37}$/.test(c.amount)
+    || !integer(c.rule_id, 1, 0xffffffff) || !integer(c.signature_expiration_ledger, 1, 0xffffffff)
+    || !integer(c.min_ledger, 1, c.signature_expiration_ledger)
+    || new Set([c.account, c.policy, c.delegate, c.recipient, NATIVE_ASSET]).size !== 5) fail('intent', 'the use is malformed');
+  return { network_id: c.network_id, account: c.account, asset: NATIVE_ASSET, policy: c.policy, delegate: c.delegate,
+    recipient: c.recipient, amount: c.amount, rule_id: c.rule_id, signature_expiration_ledger: c.signature_expiration_ledger,
+    min_ledger: c.min_ledger };
+}
+
+/** The envelope's one call must be the asset's transfer; its auth exactly the delegate's two entries for it. */
+function useAuthorizations(c, envelopeXdr) {
+  let op;
+  try {
+    const tx = decodeEnvelope(envelopeXdr).v1.tx;
+    op = tx.operations.length === 1 && tx.operations[0].body.type === 'invokeHostFunction' ? tx.operations[0].body.invokeHostFunctionOp : null;
+  } catch { op = null; }
+  const transfer = contractCall(c.asset, 'transfer', [addressVal(c.account), addressVal(c.recipient), nativeToScVal(BigInt(c.amount), { type: 'i128' })]);
+  if (!op || op.hostFunction.type !== 'hostFunctionTypeInvokeContract' || !same(op.hostFunction.invokeContract, transfer)) {
+    fail('not_the_transfer', 'the simulated transaction is not exactly the granted transfer');
+  }
+  if (op.auth.length !== 2) fail('entry_count', `${op.auth.length} authorizations, not the delegate's two`);
+  const [accountEntry, signerEntry] = op.auth;
+  let credentials, signer;
+  try { credentials = directAddressCredentials(accountEntry.credentials); signer = directAddressCredentials(signerEntry.credentials); } catch {
+    fail('credentials', 'an authorization entry does not carry direct address credentials');
+  }
+  if ([credentials, signer].some((x) => x.signatureExpirationLedger !== c.signature_expiration_ledger)) {
+    fail('expiry', `an authorization does not expire at the approved ${c.signature_expiration_ledger}`);
+  }
+  if (Address.fromScAddress(credentials.address).toString() !== c.account || !rootIs(accountEntry, transfer)) {
+    fail('transfer_root', 'the account\'s authorization is not exactly the granted transfer');
+  }
+  const { ruleIds, signers } = authPayload(credentials);
+  if (!sameIds(ruleIds, [c.rule_id])) fail('transfer_rule_ids', `the transfer is checked under [${ruleIds}], not exactly [${c.rule_id}]`);
+  if (signers.length !== 1 || !same(signers[0].key, signerScVal({ kind: 'delegated', address: c.delegate })) || signers[0].proof.length) {
+    fail('transfer_signers', 'the transfer authorization\'s signers are not exactly {Delegated(delegate)}');
+  }
+  const record = { entry: accountEntry, credentials, ruleIds };
+  const checkAuth = contractCall(c.account, '__check_auth', [xdr.ScVal.scvBytes(accountDigest(record))]);
+  if (Address.fromScAddress(signer.address).toString() !== c.delegate || !rootIs(signerEntry, checkAuth) || signer.signature.type === 'scvVoid') {
+    fail('signer_entry', 'the delegate\'s authorization is not one signed entry for exactly the account entry');
+  }
+  return { record, transfer, entries: op.auth };
+}
+
+/** The response's own record of exactly this transfer: one top-level call, then the account's one check of this entry. */
+function repeatedBinding(c, events, { record, transfer }) {
+  const calls = callsInto(events, c.asset, 'transfer');
+  if (calls.length !== 1 || calls[0].by !== null || !same(calls[0].data, vec(transfer.args))) {
+    fail('unbound_response', 'the response does not record one top-level call of exactly the granted transfer');
+  }
+  const checks = callsInto(events, c.account, '__check_auth');
+  const expected = vec([xdr.ScVal.scvBytes(signaturePayload(record)), record.credentials.signature, authContexts(record.entry)]);
+  if (checks.length !== 1 || !same(checks[0].data, expected) || checks[0].index < calls[0].index) {
+    fail('unbound_response', 'the account\'s recorded authorization check is not exactly one for this envelope\'s entry');
+  }
+  return checks[0].index;
+}
+
+/**
+ * A second use the policy let through: the cap did not hold. Counted only when the response is this
+ * envelope's — its transaction data, exactly its entries echoed, a successful record of exactly this
+ * transfer and this entry's check — so that a garbled or unrelated answer is not reported as that.
+ */
+function repeatedPermit(c, simulation, bound) {
+  try { decoded(xdr.SorobanTransactionData, simulation.transactionData, 'the transaction data'); } catch {
+    fail('unbound_response', 'a permit without transaction data is not this envelope\'s');
+  }
+  const auth = Array.isArray(simulation.results) && simulation.results.length === 1 ? simulation.results[0]?.auth : null;
+  if (!Array.isArray(auth) || auth.length !== bound.entries.length || auth.some((text, i) => text !== bound.entries[i].toXDR('base64'))) {
+    fail('unbound_response', 'the result does not echo exactly the envelope\'s authorization entries');
+  }
+  if (!Array.isArray(simulation.events) || !simulation.events.length) fail('unbound_response', 'the simulation reported no diagnostic events');
+  const events = responseEvents(simulation);
+  if (events.some((e) => !e.ok)) fail('unbound_response', 'a permit\'s events include some from failed calls');
+  repeatedBinding(c, events, bound);
+  fail('permitted', 'the policy permitted the second use: the call cap did not hold');
+}
+
+function repeatedDenial(c, simulation, { record, transfer }) {
+  const text = simulation.error;
+  if (typeof text !== 'string' || text.length > 1024 * 1024) fail('simulation', 'the failed simulation carries no host error');
+  if (simulation.stateChanges?.length || simulation.results?.length) fail('simulation', 'a failed simulation reported effects');
+  const host = text.split('\n')[0].slice(0, 200);
+  if (text.split('\n')[0] !== 'HostError: Error(Auth, InvalidAction)') {
+    fail('not_a_policy_denial', 'the top-level failure is not the transfer authentication failure', { host });
+  }
+  const code = policyDenial(text, c.asset, c.account, c.policy);
+  if (code === null) fail('not_a_policy_denial', 'the policy did not refuse the account\'s authorization', { host });
+  if (code !== CALL_COUNT_EXCEEDED) fail('policy_code', `the policy refused with ${code}, not CallCountExceeded (${CALL_COUNT_EXCEEDED})`, { code, host });
+  if (!Array.isArray(simulation.events) || !simulation.events.length) fail('unbound_response', 'the simulation reported no diagnostic events');
+  const events = responseEvents(simulation);
+  if (events.some((e) => e.ok)) fail('unbound_response', 'a refusal\'s events include some from successful calls');
+  const transferCheck = repeatedBinding(c, events, { record, transfer });
+  const authFailed = vec([xdr.ScVal.scvString('failed account authentication with error'), addressVal(c.account), contractError(code)]);
+  const checkReturned = returnsOf(events, c.account, '__check_auth').find((e) => e.index > transferCheck);
+  const accountEvents = events.filter((e) => e.host && e.by === contractHex(c.account) && e.index > transferCheck
+    && (!checkReturned || e.index < checkReturned.index));
+  if (accountEvents.some((e) => {
+    if (same(e.topics[0], sym('error'))) return e.topics.length !== 2 || !same(e.topics[1], contractError(code));
+    const data = e.data.type === 'scvVec' ? e.data.vec : [];
+    if (same(e.topics[0], sym('log')) && same(data[0], xdr.ScVal.scvString('VM call trapped with HostError'))
+      && same(data[1], sym('__check_auth'))) return data.length !== 3 || !same(data[2], contractError(code));
+    return false;
+  })) fail('not_a_policy_denial', 'the account reported a conflicting failure during the transfer\'s authorization', { host });
+  const policyError = errorsBy(events, c.policy).find((e) => e.topics[1].error.contractCode === code && e.index > transferCheck
+    && (!checkReturned || e.index < checkReturned.index));
+  if (!policyError || !events.some((e) => e.host && e.index > policyError.index && e.by === contractHex(c.asset) && e.topics.length === 2
+    && same(e.topics[0], sym('error')) && same(e.topics[1], errorVal(xdr.ScError.sceAuth(xdr.ScErrorCode.scecInvalidAction)))
+    && same(e.data, authFailed))) {
+    fail('not_a_policy_denial', 'the structured events do not show the policy refusing the transfer\'s authorization', { host });
+  }
+  return { outcome: 'deny', reason: 'call_count_exceeded', enforcer: c.policy, code, host };
+}
+
+/**
+ * Validate a second use: `intent` the use (account, policy, delegate, recipient, amount, the
+ * installed rule and the signatures' expiry), `envelopeXdr` the exact simulated transaction and
+ * `simulation` the RPC's raw enforce-mode result. `deny` only for the policy's own call-cap refusal of
+ * exactly this envelope; a permit is `failed` with reason `permitted` (the cap did not hold), and
+ * anything else `failed` with its reason. Never submitted; state-dependent simulation evidence.
+ */
+export function validateRepeatedUse(input) {
+  try {
+    const { intent, envelopeXdr, simulation } = input ?? {};
+    const c = useCase(intent);
+    const bound = useAuthorizations(c, envelopeXdr);
+    if (!simulation || typeof simulation !== 'object' || simulation._parsed || simulation.restorePreamble
+      || !integer(simulation.latestLedger, c.min_ledger, c.signature_expiration_ledger)) {
+      fail('simulation', 'the simulation needs restoration, comes from a node before the use or after the signatures, or is malformed');
+    }
+    if (simulation.error === undefined) repeatedPermit(c, simulation, bound);
+    const verdict = repeatedDenial(c, simulation, bound);
+    return freezeCopy({ ...verdict, amount: c.amount, envelope_xdr_sha256: sha256(Buffer.from(envelopeXdr, 'base64')).toString('hex'),
+      simulation_ledger: simulation.latestLedger, signature_expiration_ledger: c.signature_expiration_ledger, submitted: false });
+  } catch (e) {
+    if (e instanceof Refusal) return freezeCopy({ outcome: 'failed', reason: e.reason, detail: e.message, ...e.extra });
+    return freezeCopy({ outcome: 'failed', reason: 'malformed', detail: 'the simulation or its authorizations did not decode' });
+  }
+}

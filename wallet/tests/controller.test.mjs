@@ -1029,3 +1029,97 @@ for (const change of ['rederived display', 'wallet account']) test(`lost replace
   assert.ok(f.controller.state.replacementPending);
   assert.equal(f.controller.state.replacement, null);
 });
+
+const USE = Object.freeze({ status: 'used', installationId: hash('6'), ruleId: 1, transactionHash: hash('a'), ledger: 200, trust: 'rpc_reported',
+  amountStroops: '1000000', recipient: `G${'B'.repeat(55)}`, delegate: DELEGATE, callCount: { before: 0, after: 1, max: 1, readLedger: 201 },
+  signedBy: 'automation_delegate_only', ownerAsked: false, feeChargedStroops: '60000' });
+const REPEAT = Object.freeze({ outcome: 'deny', reason: 'call_count_exceeded', enforcer: 'policy1', code: 7, host: 'HostError: Error(Auth, InvalidAction)',
+  amount: '1000000', envelope_xdr_sha256: hash('b'), simulation_ledger: 205, signature_expiration_ledger: 230, submitted: false,
+  usedBy: hash('a'), account: 'account', policy: 'policy1', ruleId: 1 });
+async function installedWithDelegate(change = () => {}) {
+  const f = fixture();
+  f.replies.status.capabilities.liveCheck = true;
+  f.replies['create-delegate'] = { capabilityId: hash('5'), address: DELEGATE };
+  f.replies['use-grant'] = { receipt: { hash: hash('a'), ledger: 200, trust: 'rpc_reported' }, use: USE };
+  f.replies['try-grant-again'] = { repeat: REPEAT };
+  change(f);
+  await prepared(f);
+  await f.controller.createDelegate();
+  await f.controller.prepareInstall();
+  await f.controller.install();
+  f.replies.status = { ...f.replies.status, capabilities: { ...f.replies.status.capabilities, grantUse: true, grantRepeat: true } };
+  return f;
+}
+
+test('the automation key uses the installed grant with no passkey, then the same payment again is only simulated', async () => {
+  const f = await installedWithDelegate();
+  const signed = f.calls.filter(([name]) => name === 'sign').length;
+  await f.controller.useGrant();
+  const sent = f.calls.find(([name]) => name === 'use-grant');
+  assert.deepEqual(sent[1], { installationId: hash('6'), capabilityId: hash('5') });
+  assert.equal(f.calls.filter(([name]) => name === 'sign').length, signed, 'no passkey is asked');
+  assert.deepEqual(f.controller.state.grantUse, USE);
+  assert.deepEqual(f.controller.state.receipt, { hash: hash('a'), ledger: 200, trust: 'rpc_reported' });
+  await f.controller.tryGrantAgain();
+  assert.deepEqual(f.calls.find(([name]) => name === 'try-grant-again')[1], { installationId: hash('6'), capabilityId: hash('5') });
+  assert.deepEqual(f.controller.state.grantRepeat, REPEAT);
+});
+
+test('a use result that is not exactly this grant\'s one use by the automation key is refused', async () => {
+  for (const change of [{ ruleId: 2 }, { installationId: hash('7') }, { delegate: `G${'C'.repeat(55)}` }, { signedBy: 'owner' },
+    { ownerAsked: true }, { callCount: { before: 0, after: 0, max: 1, readLedger: 201 } }, { callCount: { before: 1, after: 2, max: 2, readLedger: 201 } },
+    { status: 'confirmed_unverified' }, { transactionHash: hash('c') }]) {
+    const f = await installedWithDelegate((g) => { g.replies['use-grant'] = { ...g.replies['use-grant'], use: { ...USE, ...change } }; });
+    await assert.rejects(f.controller.useGrant(), /wallet action refused/, JSON.stringify(change));
+    assert.equal(f.controller.state.grantUse, null);
+  }
+});
+
+test('a second try is shown as the backend judged it, and a refusal counts only as the cap', async () => {
+  const failed = { outcome: 'failed', reason: 'permitted', detail: 'the policy permitted the second use: the call cap did not hold' };
+  const f = await installedWithDelegate((g) => { g.replies['try-grant-again'] = { repeat: failed }; });
+  await f.controller.useGrant();
+  await f.controller.tryGrantAgain();
+  assert.deepEqual(f.controller.state.grantRepeat, failed);
+  for (const change of [{ code: 6 }, { reason: 'policy_denied' }, { submitted: true }, { usedBy: hash('c') }]) {
+    const g = await installedWithDelegate((h) => { h.replies['try-grant-again'] = { repeat: { ...REPEAT, ...change } }; });
+    await g.controller.useGrant();
+    await assert.rejects(g.controller.tryGrantAgain(), /wallet action refused/, JSON.stringify(change));
+    assert.equal(g.controller.state.grantRepeat, null);
+  }
+});
+
+test('a use needs the capability and this session\'s delegate; a second try needs a use', async () => {
+  const f = await installedWithDelegate();
+  await assert.rejects(f.controller.tryGrantAgain(), /wallet action refused/, 'nothing used yet');
+  f.replies.status = { ...f.replies.status, capabilities: { ...f.replies.status.capabilities, grantUse: false } };
+  await assert.rejects(f.controller.useGrant(), /wallet action refused/);
+  assert.equal(f.calls.some(([name]) => name === 'use-grant' || name === 'try-grant-again'), false);
+});
+
+test('a payment whose response was lost is adopted once the backend status lists it', async () => {
+  const f = await installedWithDelegate();
+  f.replies['use-grant'] = new Error('connection lost');
+  const listed = { ...INSTALLATION, ledger: 150, removalAttempted: false, removal: null, use: USE, repeat: null };
+  f.replies.status = { ...f.replies.status, installations: [listed] };
+  await assert.rejects(f.controller.useGrant(), /wallet action refused/);
+  assert.deepEqual(f.controller.state.grantUse, USE);
+  await f.controller.tryGrantAgain();
+  assert.equal(f.controller.state.grantRepeat.outcome, 'deny');
+  const g = await installedWithDelegate();
+  g.replies.status = { ...g.replies.status, installations: [{ ...listed, use: { ...USE, ruleId: 2 } }] };
+  await g.controller.refreshStatus();
+  assert.equal(g.controller.state.grantUse, null, 'a listed use that is not exactly this grant\'s is not adopted');
+});
+
+test('a second try that is no verdict may be made again; a verdict may not', async () => {
+  const unbound = { outcome: 'failed', reason: 'unbound_response', detail: 'the result does not echo exactly the envelope\'s authorization entries' };
+  const f = await installedWithDelegate((g) => { g.replies['try-grant-again'] = { repeat: unbound }; });
+  await f.controller.useGrant();
+  await f.controller.tryGrantAgain();
+  assert.deepEqual(f.controller.state.grantRepeat, unbound);
+  f.replies['try-grant-again'] = { repeat: REPEAT };
+  await f.controller.tryGrantAgain();
+  assert.deepEqual(f.controller.state.grantRepeat, REPEAT);
+  await assert.rejects(f.controller.tryGrantAgain(), /wallet action refused/, 'the cap already refused it');
+});

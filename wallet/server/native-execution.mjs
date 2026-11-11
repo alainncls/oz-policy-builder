@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { Keypair, StrKey } from '@stellar/stellar-sdk';
 import { ACCOUNT_WASM, NETWORK_ID, freezeCopy } from '../shared/approval.mjs';
 import { predictedRefusal } from '../shared/dry-run.mjs';
-import { createLiveCapability } from './live-signing.mjs';
+import { createLiveCapability, createUseCapability } from './live-signing.mjs';
 import { createOfflineSigner, offlineCapability, offlineDomain } from './native-protocol.mjs';
 import { runNative } from './native-process.mjs';
 import { requestText } from './raw-json.mjs';
@@ -43,9 +43,11 @@ const guarded = (check) => (...args) => { try { return check(...args); } catch {
 /**
  * Explicitly created local automation delegates. Keys exist only in this backend process; the
  * browser receives the public address and an opaque capability ID, the worker only the address.
- * A key signs through exactly two capabilities and never raw bytes: `offline` signs authorization
- * preimages in the derived offline execution network only, `live` builds and signs one live case's
- * transfer authorization on testnet only. Neither accepts the other's network.
+ * A key signs through exactly three capabilities and never raw bytes: `offline` signs authorization
+ * preimages in the derived offline execution network only; `live` builds and signs one live case's
+ * transfer authorization on testnet only; `use` builds and signs one use of an installed grant, the
+ * granted transfer under the installed rule, on testnet only. The testnet ones refuse the offline
+ * network and the offline one refuses testnet.
  */
 export class DelegateCapabilities {
   #keys = new Map();
@@ -75,6 +77,10 @@ export class DelegateCapabilities {
     const capability = createLiveCapability(key, approved);
     this.#consents.add(consent);
     return capability;
+  }
+  /** A use capability for one use of an installed grant (`createUseCapability`): one transfer, signed once. */
+  use(capabilityId, address, approved) {
+    return createUseCapability(this.#key(capabilityId, address), approved);
   }
 }
 

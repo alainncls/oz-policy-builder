@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { AgentRefusal } from './agent-handoff.mjs';
 /** Why a wallet action was refused, when the backend can say: shown to the owner as plain text. */
 export const REFUSAL_REASONS = new Set(['busy', 'rpc_too_slow', 'evidence_stale', 'signatures_still_valid', 'account_changed',
-  'review_expired']);
+  'review_expired', 'grant_already_used']);
 
 const BODY_BYTES = 64 * 1024;
 const RESPONSE_BYTES = 8 * 1024 * 1024;

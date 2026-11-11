@@ -60,6 +60,7 @@ const REFUSED: Record<string, string> = {
   evidence_stale: "the checks are more than 30 minutes old. Run them again: section 4, then the live check, then install.",
   signatures_still_valid: "signatures this wallet released earlier, by the live check or an installation entry, are still valid. Wait until their ledger has passed, then try again.",
   account_changed: "your account changed while signatures this wallet released were valid. Do not install; find out what changed first.",
+  grant_already_used: "the policy says this grant was already used, but not from this page: someone holding the automation key's signatures used it. Nothing was sent. Revoke the grant.",
   review_expired: "this review is no longer available: it expired or was already used, and it was not submitted. Prepare it again.",
 };
 const explorer = (hash: string) => `https://stellar.expert/explorer/testnet/tx/${hash}`;
@@ -715,7 +716,9 @@ function PolicyBuilder() {
         <Intro>Read your account again: is the installed grant still exactly what you approved?</Intro>
         <button className={button} disabled={busy || !state?.installation || !!state?.removal || !state?.status?.capabilities.monitoring}
           onClick={() => void run((value) => value.monitorGrant(), "Reading the installed grant…",
-            (value) => value.state.monitor?.status === "unchanged" ? "Unchanged. Next: section 8, Prepare revocation." : "Read the observation below.")}>Check installed grant now</button>
+            (value) => value.state.monitor?.status !== "unchanged" ? "Read the observation below."
+              : value.state.status?.capabilities?.grantUse ? "Unchanged. Next: section 8, Pay with the automation key."
+                : "Unchanged. Next: section 9, Prepare revocation.")}>Check installed grant now</button>
         {state?.monitor && <>
           <p className="text-sm">Observation: <Badge tone={tone(label(state.monitor.status))}>{label(state.monitor.status)}</Badge>
             {" "}{state.monitor.status === "unchanged" ? "Your account's rule and who can act on it are exactly as you approved."
@@ -725,8 +728,49 @@ function PolicyBuilder() {
         </>}
       </section>
 
+      <section className={panel} aria-labelledby="use-heading">
+        <h2 id="use-heading" className="text-xl font-semibold">8. Use the grant</h2>
+        <Intro>The automation key makes the granted payment by itself: no passkey. Then it tries the same payment again, and the
+          policy has to refuse it, because the grant allowed one use.</Intro>
+        <div className="flex flex-wrap gap-3">
+          <button className={button} disabled={busy || !state?.installation || !!state?.removal || !!state?.grantUse
+            || !state?.status?.capabilities.grantUse}
+            onClick={() => void run((value) => value.useGrant(), "The automation key signs the payment; the wallet sends it and reads the policy's counter (about 10 s)…",
+              "Paid by the automation key alone. Next: Try the same payment again.", ["Automation key pays, no passkey"])}>Pay with the automation key</button>
+          <button className={button} disabled={busy || state?.grantUse?.status !== "used" || !!state?.removal
+            || state?.grantRepeat?.outcome === "deny" || state?.grantRepeat?.reason === "permitted" || !state?.status?.capabilities.grantRepeat}
+            onClick={() => void run((value) => value.tryGrantAgain(), "The automation key signs the same payment again; the wallet simulates it on testnet…",
+              (value) => value.state.grantRepeat?.outcome === "deny" ? "Refused: the grant's one use is spent. Next: section 9, Prepare revocation."
+                : "Read the result below.")}>Try the same payment again</button>
+        </div>
+        {state?.grantUse && <p className="text-sm"><Badge tone="pass">Paid</Badge> {xlm(state.grantUse.amountStroops)} to
+          {" "}<span className="break-all">{label(state.grantUse.recipient)}</span>, signed by the automation key alone. The policy now counts
+          {" "}{label(object(state.grantUse.callCount).after)} of {label(object(state.grantUse.callCount).max)} use.{" "}
+          <a className="text-cyan-300 underline" href={explorer(label(state.grantUse.transactionHash))} target="_blank" rel="noreferrer">view on Stellar Expert</a></p>}
+        {state?.grantUse && <Details title="Payment record"><Evidence title="Use" value={state.grantUse} /></Details>}
+        {state?.grantRepeat && <p className="text-sm">{state.grantRepeat.outcome === "deny"
+          ? <><Badge tone="pass">Refused</Badge> The policy refused the same payment with CallCountExceeded: the grant&apos;s one use is spent.
+            Simulated on testnet; nothing was sent.</>
+          : state.grantRepeat.reason === "permitted"
+            ? <><Badge tone="fail">Not refused</Badge> The policy let the second payment through: the one-use limit did not hold. Its
+              signatures stay valid until ledger {label(state.grantRepeat.signatureExpirationLedger)}: revoke the grant now.</>
+            : <><Badge tone="wait">No answer</Badge> Testnet&apos;s answer to the second try settled nothing ({label(state.grantRepeat.reason)});
+              nothing was sent. Try it again.</>}</p>}
+        {state?.grantRepeat && <Details title="Second try"><Evidence title="Second try" value={state.grantRepeat} /></Details>}
+        <Details>
+          <p>The payment is the native asset&apos;s transfer from your account, authorized only by the automation key under the installed
+            rule; the backend&apos;s test account pays the fee and submits it. Your account checks the rule and its signer, and the policy
+            checks the exact recipient and amount and counts the call. The wallet accepts the payment only with the asset&apos;s transfer
+            event and the policy&apos;s counter read at 1 afterwards.</p>
+          <p>The second try signs the same payment again, with fresh signatures, and only simulates it on testnet. It counts as refused
+            only if the policy itself raised CallCountExceeded (7) for exactly that transaction, answered by a node that has seen the
+            payment. Those signatures expire within about two and a half minutes. While the use is spent the policy refuses them; if
+            it ever let one through, revoke at once.</p>
+        </Details>
+      </section>
+
       <section className={panel} aria-labelledby="revoke-heading">
-        <h2 id="revoke-heading" className="text-xl font-semibold">8. Revoke the grant</h2>
+        <h2 id="revoke-heading" className="text-xl font-semibold">9. Revoke the grant</h2>
         <Intro>Take the permission back, with your passkey.</Intro>
         <button className={button}
           disabled={busy || !state?.installation || !state?.status?.capabilities.lifecycle || state?.revokeAttempted || open("revoke", state?.revokePreview) || items(state?.monitor?.reasons).some((reason) =>
@@ -747,7 +791,7 @@ function PolicyBuilder() {
       </section>
 
       <section className={panel} aria-labelledby="replacement-heading">
-        <h2 id="replacement-heading" className="text-xl font-semibold">9. Replace after revoking (optional)</h2>
+        <h2 id="replacement-heading" className="text-xl font-semibold">10. Replace after revoking (optional)</h2>
         <Intro>Start a new grant after the old one is removed. The new one has a fresh limit: what the old one already used is extra.</Intro>
         <button className={button} disabled={busy || !state?.removal || !state?.status?.capabilities.replacement || open("replacement", state?.replacementPreview)}
           onClick={() => void run((value) => value.prepareReplacement(), "Preparing the replacement…", "Next: acknowledge the fresh limit.")}>Prepare replacement</button>

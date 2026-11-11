@@ -176,6 +176,7 @@ test('the delegate account and the raw simulation refuse anything but testnet be
   await assert.rejects(() => offTestnet.ensureDelegateAccount(Keypair.random().publicKey()), /refused/);
   await assert.rejects(() => offTestnet.simulateRaw(unsigned(offTestnet)), /refused/);
   await assert.rejects(() => offTestnet.ledgerClock(), /refused/);
+  await assert.rejects(() => offTestnet.callCount({ account: ACCOUNT, policy: POLICY, ruleId: 2 }), /refused/);
   assert.deepEqual(reached, [], 'nothing was read or sent off testnet');
 });
 
@@ -196,4 +197,22 @@ test('the ledger clock is the latest header, bound to its sequence and hash', as
   await assert.rejects(() => network.ledgerClock(), /refused/, 'a header that does not hash to the reported ID');
   latest = { sequence: 501, id: id(header(500, 1792655637)), headerXdr: header(500, 1792655637) };
   await assert.rejects(() => network.ledgerClock(), /refused/, 'a header for another ledger');
+});
+
+test('the call count is the policy\'s own CallCount(account, rule) entry, read alone', async (t) => {
+  const key = dataKey(POLICY, keyed('CallCount', new Address(ACCOUNT).toScVal(), xdr.ScVal.scvU32(2)));
+  const counted = (val) => () => [entry(key, dataVal(POLICY, keyed('CallCount', new Address(ACCOUNT).toScVal(), xdr.ScVal.scvU32(2)), val))];
+  const f = fixture(t, { entries: counted(xdr.ScVal.scvU32(1)) });
+  assert.deepEqual(await f.network.callCount({ account: ACCOUNT, policy: POLICY, ruleId: 2 }), { ledger: 501, count: 1 });
+  assert.equal(f.requests.length, 1);
+  assert.ok(same(f.requests[0][0], key) && f.requests[0].length === 1, 'exactly the policy\'s counter for this account and rule');
+  assert.deepEqual(await fixture(t).network.callCount({ account: ACCOUNT, policy: POLICY, ruleId: 2 }), { ledger: 501, count: null },
+    'no counter: the policy is not installed for the rule');
+  for (const val of [xdr.ScVal.scvI32(1), xdr.ScVal.scvBool(true), xdr.ScVal.scvVoid()]) {
+    await assert.rejects(() => fixture(t, { entries: counted(val) }).network.callCount({ account: ACCOUNT, policy: POLICY, ruleId: 2 }), /refused/);
+  }
+  for (const input of [{ account: POLICY, policy: POLICY, ruleId: 2 }, { account: ACCOUNT, policy: POLICY, ruleId: -1 },
+    { account: Keypair.random().publicKey(), policy: POLICY, ruleId: 2 }]) {
+    await assert.rejects(() => fixture(t).network.callCount(input), /refused/, JSON.stringify(input));
+  }
 });
