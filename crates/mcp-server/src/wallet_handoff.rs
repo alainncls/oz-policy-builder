@@ -195,6 +195,10 @@ impl WalletBridge {
                 .redirects(0)
                 .try_proxy_from_env(false)
                 .timeout(Duration::from_secs(5))
+                // No pooling: the wallet closes idle connections, and ureq 2 fails a call on a
+                // pooled one the OS has since reset instead of opening a new one. Loopback
+                // connections are cheap.
+                .max_idle_connections(0)
                 .build(),
             capability: None,
             connection: None,
@@ -467,6 +471,70 @@ mod tests {
             3
         );
     }
+    /// The wallet closes an idle connection after five seconds, and about a minute later macOS
+    /// resets it. A pooled connection in that state failed the next call outright, so the first
+    /// call after a pause of a minute or more failed and its retry worked. Each call now opens
+    /// its own.
+    #[test]
+    fn each_call_opens_its_own_connection_so_an_idle_close_cannot_fail_the_next() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let connections = Arc::new(AtomicUsize::new(0));
+        let counted = connections.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { return };
+                counted.fetch_add(1, Ordering::SeqCst);
+                std::thread::spawn(move || {
+                    let mut reader = BufReader::new(stream.try_clone().unwrap());
+                    let mut writer = stream;
+                    // Serve requests on this connection for as long as the client keeps it.
+                    loop {
+                        let mut length = 0;
+                        loop {
+                            let mut line = String::new();
+                            if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                                return;
+                            }
+                            if line == "\r\n" {
+                                break;
+                            }
+                            if let Some(value) =
+                                line.to_ascii_lowercase().strip_prefix("content-length:")
+                            {
+                                length = value.trim().parse().unwrap();
+                            }
+                        }
+                        let mut body = vec![0; length];
+                        if reader.read_exact(&mut body).is_err() {
+                            return;
+                        }
+                        // Keep-alive, as the wallet answers: a pooling client would reuse this.
+                        let answer = reply("pairing_refused");
+                        let _ = write!(
+                            writer,
+                            "HTTP/1.1 422 Unprocessable Entity\r\ncontent-type: application/json\r\n\
+                             content-length: {}\r\n\r\n",
+                            answer.len()
+                        );
+                        let _ = writer.write_all(&answer);
+                    }
+                });
+            }
+        });
+        let mut bridge = WalletBridge::new(&format!("http://127.0.0.1:{port}")).unwrap();
+        let code = format!("ozpb-pair-{}", "0".repeat(64));
+        for _ in 0..2 {
+            let Err(error) = bridge.connect(&code) else {
+                panic!("a refused pairing code connected")
+            };
+            assert_eq!(error.code, EWalletPairingRequired);
+        }
+        assert_eq!(connections.load(Ordering::SeqCst), 2);
+    }
+
     #[test]
     fn only_operator_configured_literal_loopback_origins_are_accepted() {
         assert!(WalletBridge::new("http://127.0.0.1:4317").is_ok());
