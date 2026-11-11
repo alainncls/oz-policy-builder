@@ -17,31 +17,33 @@ with throwaway fee-payer keys, and only when you run them.
 The full technical architecture (v0.8) lives in `docs/architecture.md`. The Tranche 1
 release surface is the core pipeline — recorder → PolicySpec → synthesizer → codegen —
 plus the independent reference evaluator, capability registries, and the MCP operations
-needed to record and synthesize. Paths explicitly marked **Tranche 2** describe or contain
-ongoing later-milestone work; they are not part of the Tranche 1 delivery and are not a
-claim that those milestones are complete.
+needed to record and synthesize. Paths explicitly marked **Tranche 2** belong to the second
+milestone, described below.
 
 Stellar/SCF reviewers can reproduce the milestone from the
 [Tranche 1 verification guide](docs/TRANCHE-1-VERIFICATION.md), which maps every contracted
 item to an executable check and the artifact it produces.
 
-The [Tranche 2 verification guide](docs/TRANCHE-2-VERIFICATION.md) maps the current automated
-checks and the separate live integration evidence still required for the second milestone.
+The [Tranche 2 verification guide](docs/TRANCHE-2-VERIFICATION.md) maps every contracted item
+of the second milestone to its automated checks and live evidence.
 
 ## Tranche 2 status
 
-The [contracted testnet milestone](https://github.com/gateway-fm/oz-policy-builder/issues/3)
-is not complete. The integrated tree includes dry-run execution, testnet walkthroughs,
-agent/wallet handoff, wallet install/revoke, revoke-first replacement and on-demand
-monitoring, and self-hosting/worker packages; see the
+This tree delivers the [contracted testnet milestone](https://github.com/gateway-fm/oz-policy-builder/issues/3):
+the dry-run harness (the recorded call permitted, its derived denials refused live), the
+Claude skill with confirm-before-deploy, the three testnet walkthroughs (Blend yield claim,
+SEP-41 subscription, bounded Soroswap swap), the Pollywallet integration (the owner installs
+and revokes a grant with a passkey; the automation key uses it once) and the self-hostable MCP
+endpoint with published images. The public demonstration on 11 November 2026 ran the
+walkthroughs, Claude and the wallet on testnet, with a person's passkey in the wallet, and a
+hosted reference instance passed its acceptance check;
+[testnet evidence §24–§26](docs/TESTNET-EVIDENCE-TRANCHE-2.md#24-demonstration-walkthrough-runs-11-november-2026)
+list every transaction and refusal. The
 [acceptance crosswalk](docs/TRANCHE-2-VERIFICATION.md#contracted-outcome-and-milestone-boundary)
-for what is implemented and the evidence still required.
+maps each item to that evidence and to the limits it keeps.
 
-A deployed hosted testnet MCP endpoint and its operational checks, final-revision reports,
-remaining invariant coverage, the executed agent workflow,
-and the public demo/video still need closure. The production versioned release
-(self-hostable; Gateway operates no service), audit remediation, OpenZeppelin sign-off
-and mainnet wallet integration are
+The production versioned release (self-hostable; Gateway operates no service), audit
+remediation, OpenZeppelin sign-off and mainnet wallet integration are
 [Tranche 3](https://github.com/gateway-fm/oz-policy-builder/issues/4).
 
 ## The pipeline
@@ -130,8 +132,8 @@ not treated as assurance.
 
 The [Tranche 2 evidence record](docs/TESTNET-EVIDENCE-TRANCHE-2.md) separates historical
 testnet and browser observations from current automated checks, and explains how to capture
-a reviewable harness run. The [scope map](docs/SCOPE.md#tranche-2-status) lists the remaining
-wallet, harness, hosting and walkthrough work; it does not claim milestone completion.
+a reviewable harness run. The [scope map](docs/SCOPE.md#tranche-2-status) lists what each area
+delivers and the limits it keeps.
 
 ## License
 

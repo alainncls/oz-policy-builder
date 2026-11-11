@@ -1,0 +1,1239 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "local_harness_record",
+  "limitations": [
+    "Local files can be edited; this summary is not authenticated ledger evidence or a milestone verdict.",
+    "Artifact hashes identify exact file bytes, not independent reproduction or canonical spec identity.",
+    "A missing install record does not prove that nothing was submitted.",
+    "Denials describe enforcing simulations, not failed on-chain transactions.",
+    "Passkey runs use an exportable software credential in a virtual authenticator.",
+    "Authority trust, when used, is operator-supplied test configuration.",
+    "A recorded reproduction result is a local observation; it is not live preflight or a wallet acceptance verdict."
+  ],
+  "provenance": {
+    "status": "exited_zero",
+    "started_at": "2026-11-11T16:21:26.417Z",
+    "finished_at": "2026-11-11T16:24:47.692Z",
+    "exit_code": 0,
+    "checkout_commit": "e5cc132aa52358d65d190633b3fed12baa8178fc",
+    "checkout_dirty": false,
+    "node_version": "24.15.0",
+    "cli": {
+      "mode": "external",
+      "binary_sha256": "34aa2fa641006b235bd5354bccaa6b39fc5c8de37b172c00b61fc59b2e8a597f"
+    }
+  },
+  "run": {
+    "network": "testnet",
+    "protocol": 30,
+    "account": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+    "account_code_hash": "a12747ff6c139dc14fc2fd30d200d6bbb5da7b5d59812c047ce1f9cad226b289",
+    "owner": {
+      "kind": "ed25519",
+      "address": "GDIE4TUDFMZCT4EUAVO73WKYJRFZMXKZNLT2X2KF6HLXRSEA2GB7IBWE"
+    },
+    "delegate": "GBMBZDPTJA2LMMIVREPMCANIOFRNKIGUIR7AIINFCHRS534NGOU3NFXU",
+    "target": null,
+    "recipient": null,
+    "amount": null,
+    "valid_until_ledger": 5678124,
+    "registry_root": "3e7c6ca88af0aa98b9153986d07a8e871538991981a82fe2406550187e18f5a6",
+    "policy": null,
+    "policy_wasm_hash": null,
+    "rule_id": null,
+    "installation": "not_recorded",
+    "transactions": {
+      "deploy_account": "3224167babf328c6207eb82b54b3106f89f9933076729fd201f629c773474e4c",
+      "fund_account": "1dfb825bc29506e2c6f4a0583665db0bf9f9c03b6c35d891a7b093358231cdad"
+    },
+    "authority": {
+      "status": "not_recorded"
+    },
+    "invocations": []
+  },
+  "pipeline": {
+    "status": "not_recorded"
+  },
+  "lifecycle": {
+    "status": "not_recorded",
+    "removals": [],
+    "configuration_checks": []
+  },
+  "failure_cleanup": {
+    "status": "not_recorded"
+  },
+  "walkthrough": {
+    "kind": "soroswap_swap",
+    "owner_transaction": {
+      "transaction": "a11cd79b3240a3447c49c2c8185cc99c53348f9721a23e3b2501ab31f7d4b2ad",
+      "ledger": 5678094,
+      "output_token": "CB3TLW74NBIOT3BUWOZ3TUM6RFDF6A4GVIRUQRQZABG5KPOUL4JJOV2F",
+      "returned_amount": "142668"
+    },
+    "invocations": [
+      {
+        "name": "owner_record",
+        "control": "baseline",
+        "authorization": "recorded",
+        "signer": "owner",
+        "rule_ids": [
+          0,
+          0
+        ],
+        "observation": "submitted_transaction",
+        "status": "confirmed",
+        "transaction": "a11cd79b3240a3447c49c2c8185cc99c53348f9721a23e3b2501ab31f7d4b2ad",
+        "ledger": 5678094,
+        "enforcer": null,
+        "code": null,
+        "returned_amount": "142668"
+      },
+      {
+        "name": "input_cap",
+        "control": "input_cap",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678107,
+        "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+        "code": 6,
+        "returned_amount": null
+      },
+      {
+        "name": "output_floor",
+        "control": "output_floor",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678107,
+        "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+        "code": 6,
+        "returned_amount": null
+      },
+      {
+        "name": "path_reordered",
+        "control": "path_reordered",
+        "authorization": "signed_without_recording",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678107,
+        "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+        "code": 6,
+        "returned_amount": null
+      },
+      {
+        "name": "path_extended",
+        "control": "path_extended",
+        "authorization": "signed_without_recording",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678107,
+        "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+        "code": 6,
+        "returned_amount": null
+      },
+      {
+        "name": "path_truncated",
+        "control": "path_truncated",
+        "authorization": "signed_without_recording",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678107,
+        "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+        "code": 6,
+        "returned_amount": null
+      },
+      {
+        "name": "foreign_recipient",
+        "control": "foreign_recipient",
+        "authorization": "signed_without_recording",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_recipient_refusal",
+        "transaction": null,
+        "ledger": 5678108,
+        "enforcer": null,
+        "code": null,
+        "returned_amount": null
+      },
+      {
+        "name": "router_function",
+        "control": "router_function",
+        "authorization": "signed_without_recording",
+        "signer": "delegate",
+        "rule_ids": [
+          1
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678108,
+        "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+        "code": 5,
+        "returned_amount": null
+      },
+      {
+        "name": "deadline_plus_one",
+        "control": "deadline_plus_one",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678108,
+        "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+        "code": 6,
+        "returned_amount": null
+      },
+      {
+        "name": "maximum_deadline",
+        "control": "maximum_deadline",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678108,
+        "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+        "code": 6,
+        "returned_amount": null
+      },
+      {
+        "name": "wrong_signer",
+        "control": "baseline",
+        "authorization": "recorded",
+        "signer": "payer",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678108,
+        "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+        "code": 3016,
+        "returned_amount": null
+      },
+      {
+        "name": "zero_signers",
+        "control": "baseline",
+        "authorization": "recorded",
+        "signer": "none",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678108,
+        "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+        "code": 1,
+        "returned_amount": null
+      },
+      {
+        "name": "independent_token",
+        "control": "direct_token",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_independent_permission",
+        "transaction": null,
+        "ledger": 5678109,
+        "enforcer": null,
+        "code": null,
+        "returned_amount": null
+      },
+      {
+        "name": "token_cap",
+        "control": "direct_token_cap",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678109,
+        "enforcer": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+        "code": 6,
+        "returned_amount": null
+      },
+      {
+        "name": "delegate_swap",
+        "control": "baseline",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "submitted_transaction",
+        "status": "confirmed",
+        "transaction": "b0a485064673dd7b7bd61d08c6b1d9b0323cb20652cee5a3e6a56ea2d2f7a88b",
+        "ledger": 5678110,
+        "enforcer": null,
+        "code": null,
+        "returned_amount": "142668"
+      },
+      {
+        "name": "count_cap",
+        "control": "baseline",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678110,
+        "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+        "code": 7,
+        "returned_amount": null
+      },
+      {
+        "name": "token_count_cap",
+        "control": "direct_token",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678110,
+        "enforcer": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+        "code": 7,
+        "returned_amount": null
+      },
+      {
+        "name": "expired_rule",
+        "control": "baseline",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678125,
+        "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+        "code": 3002,
+        "returned_amount": null
+      },
+      {
+        "name": "post_revocation",
+        "control": "baseline",
+        "authorization": "recorded",
+        "signer": "delegate",
+        "rule_ids": [
+          1,
+          2
+        ],
+        "observation": "enforcing_simulation",
+        "status": "verified_denial",
+        "transaction": null,
+        "ledger": 5678128,
+        "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+        "code": 3000,
+        "returned_amount": null
+      }
+    ],
+    "bundle": {
+      "status": "installed",
+      "spec_hash": "3f71d43f002d433fd0d4b587626dc1661d6b8d66e4fa94bf5bf5fd8aaeef3ae6",
+      "registry_root": "3e7c6ca88af0aa98b9153986d07a8e871538991981a82fe2406550187e18f5a6",
+      "cleanup": "removed",
+      "entries": [
+        {
+          "rule_index": 0,
+          "wasm_hash": "dea4f4379fdeee7a0737fc212a1372e9249ece7a7df5ff570e8de3c3ae4f4603",
+          "policy": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "rule_id": 1,
+          "installation_transaction": "3839e95cfba1665f538c73d23218b67ad6258a118e7a12e92cb75884512addb9",
+          "pending": null,
+          "authority": {
+            "status": "rechecked",
+            "authority_commitment": "f8f65be053b1a5c34df4d10148d72c16d7f8a605614001a51fba33f85cb9c9e3",
+            "checked_at_ledger": 5678101,
+            "rechecked_at_ledger": 5678101
+          },
+          "readback": {
+            "configuration": "matched",
+            "observation": "non_atomic",
+            "read_ledgers": {
+              "account": 5678103,
+              "policy": 5678103,
+              "rule": 5678103,
+              "installed": 5678103
+            }
+          },
+          "removal": {
+            "transaction": "4a2a2e745291db2efce56ca3d4bd1564a576640fdc539c1d1cb9761f9570d906",
+            "ledger": 5678128,
+            "event": "verified",
+            "rule_readback": "absent",
+            "policy_cleanup": "not_installed"
+          },
+          "pending_removal": null
+        },
+        {
+          "rule_index": 1,
+          "wasm_hash": "edb0c39464dbde61616c90b51ca4be614f642cc243ca1f2c09c0b0b3df39ca15",
+          "policy": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+          "rule_id": 2,
+          "installation_transaction": "26c10bc8284c7aff6475724f588ae5629aba530788f08bd99e60e6ba1ff2db59",
+          "pending": null,
+          "authority": {
+            "status": "rechecked",
+            "authority_commitment": "4b73076c47578ff2ee6bb8c431806a687bc50c7816acf366c6c8148dab423cb3",
+            "checked_at_ledger": 5678103,
+            "rechecked_at_ledger": 5678104
+          },
+          "readback": {
+            "configuration": "matched",
+            "observation": "non_atomic",
+            "read_ledgers": {
+              "account": 5678105,
+              "policy": 5678105,
+              "rule": 5678105,
+              "installed": 5678105
+            }
+          },
+          "removal": {
+            "transaction": "1d8ee6125ceb3bf7c3bf376cc3da79ee6c342ff287e4be216cbb96518b7cfd69",
+            "ledger": 5678127,
+            "event": "verified",
+            "rule_readback": "absent",
+            "policy_cleanup": "not_installed"
+          },
+          "pending_removal": null
+        }
+      ]
+    },
+    "operator_decisions": {
+      "output_floor": "100000",
+      "transfer_cap": "1000000",
+      "adapter_deadline": "keep_recorded_deadline",
+      "source_sha256": "71707f18a7e2500c4935acaf0e32296e6c44d05d44efc076463b0677e5cebd7e",
+      "deadline_unix": "1794417708"
+    },
+    "controls": {
+      "status": "completed",
+      "control_set": "adapter_exact_deadline_controls",
+      "steps": [
+        {
+          "name": "input_cap",
+          "ledger": 5678107,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        {
+          "name": "output_floor",
+          "ledger": 5678107,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        {
+          "name": "path_reordered",
+          "ledger": 5678107,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        {
+          "name": "path_extended",
+          "ledger": 5678107,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        {
+          "name": "path_truncated",
+          "ledger": 5678107,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        {
+          "name": "foreign_recipient",
+          "ledger": 5678108,
+          "result": "verified_recipient_refusal",
+          "transaction": null,
+          "enforcer": null,
+          "code": null
+        },
+        {
+          "name": "router_function",
+          "ledger": 5678108,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 5
+        },
+        {
+          "name": "deadline_plus_one",
+          "ledger": 5678108,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        {
+          "name": "maximum_deadline",
+          "ledger": 5678108,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        {
+          "name": "wrong_signer",
+          "ledger": 5678108,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3016
+        },
+        {
+          "name": "zero_signers",
+          "ledger": 5678108,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 1
+        },
+        {
+          "name": "independent_token",
+          "ledger": 5678109,
+          "result": "verified_independent_permission",
+          "transaction": null,
+          "enforcer": null,
+          "code": null
+        },
+        {
+          "name": "token_cap",
+          "ledger": 5678109,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+          "code": 6
+        },
+        {
+          "name": "delegate_swap",
+          "ledger": 5678110,
+          "result": "confirmed",
+          "transaction": "b0a485064673dd7b7bd61d08c6b1d9b0323cb20652cee5a3e6a56ea2d2f7a88b",
+          "enforcer": null,
+          "code": null
+        },
+        {
+          "name": "count_cap",
+          "ledger": 5678110,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 7
+        },
+        {
+          "name": "token_count_cap",
+          "ledger": 5678110,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+          "code": 7
+        },
+        {
+          "name": "expiry_wait",
+          "ledger": 5678125,
+          "target_ledger": 5678125,
+          "result": "ledger_reached"
+        },
+        {
+          "name": "expired_rule",
+          "ledger": 5678125,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3002
+        },
+        {
+          "name": "cleanup",
+          "result": "removed"
+        },
+        {
+          "name": "post_revocation",
+          "ledger": 5678128,
+          "result": "verified_denial",
+          "transaction": null,
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3000
+        }
+      ]
+    }
+  },
+  "protocol_pipeline": {
+    "status": "recorded",
+    "kind": "soroswap_swap",
+    "recorded_transaction": "a11cd79b3240a3447c49c2c8185cc99c53348f9721a23e3b2501ab31f7d4b2ad",
+    "recording_hash": "6999fa62826cd43ab1dac763fd67525d44c2b4547214d804065fad79fd21c141",
+    "acquisition_trust": "rpc_reported",
+    "synthesis_recording_hash": "8336f3bcdb1e737c6c2ae6e055d49e45b3ccb5d0023838acb8e24d54e9ad8a27",
+    "synthesis_trust": "self_supplied",
+    "spec_hash": "3f71d43f002d433fd0d4b587626dc1661d6b8d66e4fa94bf5bf5fd8aaeef3ae6",
+    "reference_cases": 65,
+    "artifact_reproduction": "matched",
+    "current_network_preflight": "not_checked_here",
+    "adapter_status": "adapter_bound",
+    "adapter": {
+      "name": "soroswap-router@2",
+      "code_hash": "4b95bbf9caec2c6e00c786f53c5f392c2fcdb8435ac0a862ab5e0645eb65824c",
+      "rule_index": 0,
+      "registry_root": "3e7c6ca88af0aa98b9153986d07a8e871538991981a82fe2406550187e18f5a6",
+      "registry": "development_root",
+      "binding": "development_registry_assertion_not_governance"
+    },
+    "high_blast_radius": [],
+    "deadline_unix": "1794417708",
+    "artifacts": [
+      {
+        "rule_index": 0,
+        "wasm_hash": "dea4f4379fdeee7a0737fc212a1372e9249ece7a7df5ff570e8de3c3ae4f4603",
+        "normalized_input_hash": "1195e72e9c056db76f0f610f6442c0936c96cb35942b25599a393e909056799a"
+      },
+      {
+        "rule_index": 1,
+        "wasm_hash": "edb0c39464dbde61616c90b51ca4be614f642cc243ca1f2c09c0b0b3df39ca15",
+        "normalized_input_hash": "fb15808fac29ca1ca44009734ec16c4cda4966d21e864e2fe9dfc0bfd9f0d9ab"
+      }
+    ]
+  },
+  "account_dry_runs": {
+    "status": "recorded",
+    "execution": "offline_synthetic_policy_addresses_and_proposed_rule_ids",
+    "source_ledger": 5678095,
+    "reports": [
+      {
+        "rule_index": 0,
+        "run_hash": "a91e4ef8eff74e23facfc2f11ddceecd66883f4e6de9a1353cb73bbf6781d718",
+        "suite_hash": "aa83becc344712b83f4e10e659f90001d8f0bd76bd03a296bfe4c1b213b7fa40",
+        "policy_address": "CBCYS2X6FBO4VKYOTN3G4SBJO6KKV22NU7CH6D57PVOELOSRR2REYBRK",
+        "policy_code_hash": "dea4f4379fdeee7a0737fc212a1372e9249ece7a7df5ff570e8de3c3ae4f4603",
+        "execution_network_id": "9f206b777b30357c20a2584355f5bb81a3f2e5c9081b5f6e4ba60c95f1cc2b19",
+        "original_permitted": true,
+        "reverted_denials": 24,
+        "cases": 36,
+        "complete": false
+      },
+      {
+        "rule_index": 1,
+        "run_hash": "410c8bc941c96130b6dbc4e24f85be0b4c47c8ba05759507380f7f34e38d48a2",
+        "suite_hash": "39dcce88c3a3eed7d8132c2d1e07d4a78610b31fa66322ccfc20a8ce495ddf51",
+        "policy_address": "CDEBNXKMCEO5XKDVIZ7Y4YL6RD7EAH4WTIPLDK6SA5BHNXRUSMDQ2SIE",
+        "policy_code_hash": "edb0c39464dbde61616c90b51ca4be614f642cc243ca1f2c09c0b0b3df39ca15",
+        "execution_network_id": "8863433c5f306965d5cc76d4f104259da21e6fca824a0fc7a208c84981b0b3ec",
+        "original_permitted": true,
+        "reverted_denials": 20,
+        "cases": 29,
+        "complete": false
+      }
+    ]
+  },
+  "derived_denials": {
+    "status": "completed",
+    "labels": {
+      "post_install": true,
+      "state_dependent": true,
+      "simulation_only": true,
+      "submitted": false
+    },
+    "suite": {
+      "spec_hash": "3f71d43f002d433fd0d4b587626dc1661d6b8d66e4fa94bf5bf5fd8aaeef3ae6",
+      "suite_hash": "f7691e2a244f7485fce426700acb9b4bcddc60294a3ba6770df33df317478424",
+      "total": 65,
+      "minimum_denials": 5
+    },
+    "selection": "every deny case of a live-realizable class that the recorded call can carry, in suite order",
+    "policy_order": [
+      "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+      "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ"
+    ],
+    "offline": [
+      {
+        "rule_index": 0,
+        "class": "different_contract",
+        "reason": "no_live_stand_in",
+        "cases": 1,
+        "ids": [
+          "case-1"
+        ]
+      },
+      {
+        "rule_index": 0,
+        "class": "different_function",
+        "reason": "no_live_stand_in",
+        "cases": 1,
+        "ids": [
+          "case-2"
+        ]
+      },
+      {
+        "rule_index": 0,
+        "class": "type_confusion",
+        "reason": "host_rejects_before_authorization",
+        "cases": 3,
+        "ids": [
+          "case-7",
+          "case-12",
+          "case-15"
+        ]
+      },
+      {
+        "rule_index": 0,
+        "class": "arg_equality",
+        "reason": "host_rejects_before_authorization",
+        "cases": 2,
+        "ids": [
+          "case-13",
+          "case-18"
+        ]
+      },
+      {
+        "rule_index": 0,
+        "class": "different_address_arg",
+        "reason": "authorizer_replaced",
+        "cases": 1,
+        "ids": [
+          "case-14"
+        ]
+      },
+      {
+        "rule_index": 0,
+        "class": "arg_arity",
+        "reason": "host_rejects_before_authorization",
+        "cases": 2,
+        "ids": [
+          "case-19",
+          "case-20"
+        ]
+      },
+      {
+        "rule_index": 0,
+        "class": "strict_set_mutation",
+        "reason": "installation_state",
+        "cases": 2,
+        "ids": [
+          "case-25",
+          "case-26"
+        ]
+      },
+      {
+        "rule_index": 0,
+        "class": "time_boundary",
+        "reason": "ledger_time",
+        "cases": 1,
+        "ids": [
+          "case-27"
+        ]
+      },
+      {
+        "rule_index": 0,
+        "class": "call_count_boundary",
+        "reason": "installation_state",
+        "cases": 3,
+        "ids": [
+          "case-31",
+          "case-33",
+          "case-34"
+        ]
+      },
+      {
+        "rule_index": 0,
+        "class": "missing_state",
+        "reason": "installation_state",
+        "cases": 1,
+        "ids": [
+          "case-35"
+        ]
+      },
+      {
+        "rule_index": 1,
+        "class": "different_contract",
+        "reason": "no_live_stand_in",
+        "cases": 1,
+        "ids": [
+          "case-37"
+        ]
+      },
+      {
+        "rule_index": 1,
+        "class": "different_function",
+        "reason": "no_live_stand_in",
+        "cases": 1,
+        "ids": [
+          "case-38"
+        ]
+      },
+      {
+        "rule_index": 1,
+        "class": "different_address_arg",
+        "reason": "authorizer_replaced",
+        "cases": 1,
+        "ids": [
+          "case-39"
+        ]
+      },
+      {
+        "rule_index": 1,
+        "class": "type_confusion",
+        "reason": "host_rejects_before_authorization",
+        "cases": 3,
+        "ids": [
+          "case-40",
+          "case-42",
+          "case-47"
+        ]
+      },
+      {
+        "rule_index": 1,
+        "class": "arg_arity",
+        "reason": "host_rejects_before_authorization",
+        "cases": 2,
+        "ids": [
+          "case-48",
+          "case-49"
+        ]
+      },
+      {
+        "rule_index": 1,
+        "class": "strict_set_mutation",
+        "reason": "installation_state",
+        "cases": 2,
+        "ids": [
+          "case-54",
+          "case-55"
+        ]
+      },
+      {
+        "rule_index": 1,
+        "class": "time_boundary",
+        "reason": "ledger_time",
+        "cases": 1,
+        "ids": [
+          "case-56"
+        ]
+      },
+      {
+        "rule_index": 1,
+        "class": "call_count_boundary",
+        "reason": "installation_state",
+        "cases": 3,
+        "ids": [
+          "case-60",
+          "case-62",
+          "case-63"
+        ]
+      },
+      {
+        "rule_index": 1,
+        "class": "missing_state",
+        "reason": "installation_state",
+        "cases": 1,
+        "ids": [
+          "case-64"
+        ]
+      }
+    ],
+    "permits_not_replayed": 19,
+    "originals": [
+      {
+        "id": "case-0",
+        "rule_index": 0,
+        "status": "permitted",
+        "ledger": 5678105
+      },
+      {
+        "id": "case-36",
+        "rule_index": 1,
+        "status": "permitted",
+        "ledger": 5678106
+      }
+    ],
+    "cases": [
+      {
+        "id": "case-5",
+        "rule_index": 0,
+        "class": "numeric_boundary",
+        "family": "argument",
+        "label": "rule[0] above upper bound arg[0]",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        }
+      },
+      {
+        "id": "case-8",
+        "rule_index": 0,
+        "class": "numeric_boundary",
+        "family": "argument",
+        "label": "rule[0] below lower bound arg[1]",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        }
+      },
+      {
+        "id": "case-16",
+        "rule_index": 0,
+        "class": "arg_equality",
+        "family": "argument",
+        "label": "rule[0] u64 plus one arg[4]",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        }
+      },
+      {
+        "id": "case-17",
+        "rule_index": 0,
+        "class": "arg_equality",
+        "family": "argument",
+        "label": "rule[0] u64 maximum arg[4]",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 6
+        }
+      },
+      {
+        "id": "case-21",
+        "rule_index": 0,
+        "class": "zero_signers",
+        "family": "signer",
+        "label": "rule[0] zero authenticated signers",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 1
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CDOZPPAAB5BTLUTSYOAATHAI43TIMUVG4EVZJBFRTL2YS3325V7VP3ZO",
+          "code": 1
+        }
+      },
+      {
+        "id": "case-22",
+        "rule_index": 0,
+        "class": "wrong_signer",
+        "family": "signer",
+        "label": "rule[0] unrecognized signer authenticates",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3016
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3016
+        }
+      },
+      {
+        "id": "case-24",
+        "rule_index": 0,
+        "class": "signer_boundary",
+        "family": "signer",
+        "label": "rule[0] authorized signer set plus unrecognized signer",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3016
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3016
+        }
+      },
+      {
+        "id": "case-41",
+        "rule_index": 1,
+        "class": "different_address_arg",
+        "family": "argument",
+        "label": "rule[1] different address arg[1]",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+          "code": 6
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+          "code": 6
+        }
+      },
+      {
+        "id": "case-45",
+        "rule_index": 1,
+        "class": "numeric_boundary",
+        "family": "argument",
+        "label": "rule[1] above upper bound arg[2]",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+          "code": 6
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+          "code": 6
+        }
+      },
+      {
+        "id": "case-50",
+        "rule_index": 1,
+        "class": "zero_signers",
+        "family": "signer",
+        "label": "rule[1] zero authenticated signers",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+          "code": 1
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CBKCMGH4KKKMBCC3DCASHM36R5D2ZDGWEBHWVZ73WIFOUKP52LVKYUUJ",
+          "code": 1
+        }
+      },
+      {
+        "id": "case-51",
+        "rule_index": 1,
+        "class": "wrong_signer",
+        "family": "signer",
+        "label": "rule[1] unrecognized signer authenticates",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3016
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3016
+        }
+      },
+      {
+        "id": "case-53",
+        "rule_index": 1,
+        "class": "signer_boundary",
+        "family": "signer",
+        "label": "rule[1] authorized signer set plus unrecognized signer",
+        "realization": "mutation_on_recorded_call",
+        "stand_in": null,
+        "expected": {
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3016
+        },
+        "status": "verified_denial",
+        "ledger": 5678106,
+        "observed": {
+          "result": "deny",
+          "enforcer": "CDZAMPGSU3NENJJWR6VY6CKRKOKWPTR76Q6JQJHA3RXH6K76BNXLZ5EF",
+          "code": 3016
+        }
+      }
+    ],
+    "denials_verified": 12
+  },
+  "artifacts": {
+    "run": {
+      "sha256": "1109c7dc926e4bb1eda0fcbadb073588ce92d7efae0f558fc24bb643f26fb901",
+      "bytes": 35217
+    },
+    "provenance": {
+      "sha256": "c968d8b857c15a7d8a9540ec3075b4b1c1c71d63efd29e7ef03cc15701433052",
+      "bytes": 382
+    },
+    "protocol_pipeline": {
+      "sha256": "c21c6d69b02d0db94218d8c6371731c177407fc9b554e7871be71ad576620295",
+      "bytes": 1486
+    },
+    "account_dry_runs": {
+      "sha256": "58ccc8fff997d5e6568a58f423bd581029ab63ea4568937f508237dadf3aa46a",
+      "bytes": 1079
+    },
+    "account_dry_run_rule_0": {
+      "sha256": "c56054098382cc3ee0295cf7496091aa1a561492ab9408c22fa0b0d4dcdde687",
+      "bytes": 28708
+    },
+    "account_dry_run_rule_1": {
+      "sha256": "30a23e728646878b1dcd60b4ccbf4b188bb832ed396cacdd2911e73ae8f8ebbf",
+      "bytes": 24498
+    },
+    "derived_cases": {
+      "sha256": "c38d7134ec721b4350ca8bcd3f6130cbfac4ccc7943830e2e31628bfab476c3f",
+      "bytes": 86274
+    },
+    "spec": {
+      "sha256": "c4d818af9cc68528974d256497d832f64b6f4ccfde3486e6096dccdbe137ab74",
+      "bytes": 5795
+    },
+    "recording": {
+      "sha256": "82b3957c705ec18a5b65e2f6e530612adcfba725fd67ca2f79ceeee4985d5624",
+      "bytes": 26891
+    },
+    "synthesis": {
+      "sha256": "25883a56b98530da1c3682f77c1d50ed0dcceed86cc63f6d3c24a0b5609eb780",
+      "bytes": 8444
+    },
+    "decisions": {
+      "sha256": "2cb22b1b31af97b063d628fe36077d2840508322606f863c0f63adf6d2177f6e",
+      "bytes": 1126
+    },
+    "reference_suite": {
+      "sha256": "a581a0b583c33a30d65c0053a517548437eb63042b933db58bfd26c89e68028c",
+      "bytes": 18083
+    },
+    "build_manifest_rule_0": {
+      "sha256": "1f88d706b92acaf164196b719ec85efa1d30015be9e5c426894e155f86b8198a",
+      "bytes": 1033
+    },
+    "verification_rule_0": {
+      "sha256": "29292fe3ceae421f6d675bf77e6b72844b0faf144032ed0d93238f3cc3afcf61",
+      "bytes": 569
+    },
+    "policy_wasm_rule_0": {
+      "sha256": "dea4f4379fdeee7a0737fc212a1372e9249ece7a7df5ff570e8de3c3ae4f4603",
+      "bytes": 23272
+    },
+    "build_manifest_rule_1": {
+      "sha256": "eadd7d695bfcd33815e70c6ea8159c22f6397c6b1d96809ff89e847bf174b524",
+      "bytes": 1033
+    },
+    "verification_rule_1": {
+      "sha256": "f04fb91a98179be76b9a8ff6b02d937a30fec36fef16461750ddfd51d5a21683",
+      "bytes": 569
+    },
+    "policy_wasm_rule_1": {
+      "sha256": "edb0c39464dbde61616c90b51ca4be614f642cc243ca1f2c09c0b0b3df39ca15",
+      "bytes": 22954
+    }
+  }
+}

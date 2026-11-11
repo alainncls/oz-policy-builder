@@ -898,6 +898,14 @@ layers with their actual evidence boundaries, hosted-service deployment
 evidence, and the public demonstration/video. The controlled W1, W2 and W3 runs do not close
 those requirements. See [SCOPE.md](SCOPE.md) for the implementation map.
 
+Sections 24 to 26 add the Tranche 2 demonstration on 11 November 2026: the three walkthroughs
+at revision `e5cc132a`, each passing under §7; a wallet install, use and revoke by a person with
+a real passkey, from Claude's proposal; and the hosted reference instance's acceptance check.
+They close the walkthrough, wallet, human-approval, hosting and demonstration requirements above.
+The reviewed Blend adapter and the remaining harness layers are not closed by them; the
+[acceptance crosswalk](TRANCHE-2-VERIFICATION.md#contracted-outcome-and-milestone-boundary)
+keeps those as stated limits.
+
 ## 21. Controlled Blend claim run, 1 November 2026
 
 The [allowlisted run summary](evidence/testnet-blend-claim-derived-2026-11-01.json) records a
@@ -1060,3 +1068,79 @@ offline re-export matched the saved summary. The adapter binding remains a devel
 assertion, not governance, and the router's deployed Wasm was not reproduced from source
 ([target adapters](TARGET-ADAPTERS.md#reproduction-attempt)). These remain editable local RPC
 observations, with non-atomic reads and no ledger proof or protected wallet-approval claim.
+
+## 24. Demonstration walkthrough runs, 11 November 2026
+
+The three walkthroughs were run side by side during the recorded public demonstration, each
+from its own clean checkout at `e5cc132aa52358d65d190633b3fed12baa8178fc`, with the CLI and
+native worker built from it (the CLI's byte digest is in each provenance). That revision adds
+the `OZPB_HARNESS_GRANT_LEDGERS` setting, which shortens the grant lifetime so the expiry step
+fits a live demonstration, and the end-of-run summary. Owners were throwaway ed25519 keys approved in the explicit operator mode,
+deleted when each run ended. The allowlisted summaries are the wrappers' own exports:
+[W1](evidence/testnet-blend-claim-demo-2026-11-11.json),
+[W2](evidence/testnet-subscription-demo-2026-11-11.json) and
+[W3](evidence/testnet-soroswap-demo-2026-11-11.json). Each exited 0.
+
+| Run | Window (UTC) | Recorded call, installation and use | Derived denials (live, by predicted enforcer) | Controls and lifecycle |
+| --- | --- | --- | --- | --- |
+| W1 Blend claim | 16:21:09–16:25:55 | [Owner claim](https://stellar.expert/explorer/testnet/tx/fada40262fda822242d652168a58490786fda5555173a92197fad796d10a5498) at 5678107 (168 BLND base units); [install](https://stellar.expert/explorer/testnet/tx/c6aed83398f64843942506cfe6808b0abc03b46f55943037591f51450d0670e2); [delegated claim](https://stellar.expert/explorer/testnet/tx/dc9718729ee268df4f6e13f2fe9f3fdedd5ee83adad9df88fbe1f60417ea7358) at 5678121. The offline account-Wasm report permitted the original and reverted 19 denials (25 cases). | 5 of the 25-case suite: `case-2`, `case-6`, `case-10` (generated policy #5, #6, #1), `case-11`, `case-13` (account 3016); 14 deny cases stay offline. | All 12 steps: reserve list and recipient (#6), pool `submit` (#5), wrong signer (3016), empty signer set (#1), repeat after the delegated claim (#7), expired rule (3002 at 5678138), [removal](https://stellar.expert/explorer/testnet/tx/0a3343f54ad551b86bf91b039931f8bba0e60b950da3d68e45b901999676540c), missing rule (3000 at 5678140). |
+| W2 SEP-41 subscription | 16:21:17–16:25:01 | [Owner transfer](https://stellar.expert/explorer/testnet/tx/ee4b57f68048cfe24eaf42c6aebaa984490d50abec3cf4b70e834ed5575b67ba) through recording, synthesis, the 30-case reference suite and matching artifact reproduction; [install](https://stellar.expert/explorer/testnet/tx/e4bfaf18eaf5851d9ef38f901284793282ffa072c55d0ad1f0efa6b9c2a2471f) composed with a fresh instance of the pinned spending-limit policy; [first charge](https://stellar.expert/explorer/testnet/tx/61d1c0a478a0c3b9c984976ce066b7fe0275e4cff3e7a0850c3806d99177ba86) and [next-window charge](https://stellar.expert/explorer/testnet/tx/5ac1d404b370f272e243f0b4b005ee4ba46ae2819f211563be9fa0414541de77). | 10 of 30: `case-1` (account 3002), `case-5`, `case-7`–`case-11` (generated policy #6), `case-15` (#1), `case-16`, `case-18` (account 3016); 14 stay offline. The generated policy came first in the live policy order this time, so it, not the spending policy, refused the amount cases. | Both configurations matched before and after the charges; [removal](https://stellar.expert/explorer/testnet/tx/65b791448edbe2fec797e96b6f93d6adca1b01d17ca8f419ec663a61fe2d1499) at 5678131 read back absent, both policies uninstalled. |
+| W3 Soroswap swap | 16:21:26–16:24:47 | [Owner swap](https://stellar.expert/explorer/testnet/tx/a11cd79b3240a3447c49c2c8185cc99c53348f9721a23e3b2501ab31f7d4b2ad) at 5678094; [router rule](https://stellar.expert/explorer/testnet/tx/3839e95cfba1665f538c73d23218b67ad6258a118e7a12e92cb75884512addb9) and [transfer rule](https://stellar.expert/explorer/testnet/tx/26c10bc8284c7aff6475724f588ae5629aba530788f08bd99e60e6ba1ff2db59) installed through `soroswap-router@2`; [delegated swap](https://stellar.expert/explorer/testnet/tx/b0a485064673dd7b7bd61d08c6b1d9b0323cb20652cee5a3e6a56ea2d2f7a88b) at 5678110. Offline account-Wasm reports: 24 denials reverted for the router rule (36 cases), 20 for the transfer rule (29). | 12 of 65: `case-5`, `case-8`, `case-16`, `case-17` (router-rule policy #6, including both deadline cases), `case-21` (#1), `case-41`, `case-45` (transfer-rule policy #6), `case-50` (#1), `case-22`, `case-24`, `case-51`, `case-53` (account 3016); 32 stay offline. | All 20 steps of `adapter_exact_deadline_controls`, including both deadline controls (#6), route, function and floor controls, the two count caps (#7), expiry (3002 at 5678125), [both](https://stellar.expert/explorer/testnet/tx/4a2a2e745291db2efce56ca3d4bd1564a576640fdc539c1d1cb9761f9570d906) [removals](https://stellar.expert/explorer/testnet/tx/1d8ee6125ceb3bf7c3bf376cc3da79ee6c342ff287e4be216cbb96518b7cfd69) and the missing-rule check (3000 at 5678128). |
+
+Each report passes under [§7's definition](#what-a-passing-permitdeny-report-is): the recorded
+calls were permitted and at least five derived denials were refused live by their predicted
+enforcers. The Blend emission on reserve 3 runs until 16 November 2026, 04:23:47 UTC
+*(journal: the W1 run's local `run.json`)*. The walkthrough limits stated in sections 21–23
+still apply: no reviewed Blend adapter, no composed account-Wasm layer for W2, and a
+development-registry router binding for W3. These are local RPC observations with non-atomic
+reads and operator-mode approval; human approval is section 25.
+
+## 25. Wallet run by a person, with Claude's proposal, 11 November 2026
+
+Recorded in the [demonstration video](https://drive.google.com/file/d/19juUqgGOpdBtLzDIkTCrkJjh9w68aDkk/view)
+(16:17–16:37 UTC, alongside the walkthroughs). The Pollywallet page and wallet backend were built from
+`6c08046db7b6a9410a057dbb543c222fc6b7f315`; the MCP server Claude used had no Rust change since
+`cf8df819`. A person used a platform passkey (Touch ID) as the account's only owner and made
+every choice. The person gave Claude Code the payment's hash and asked for it to be repeatable
+once, within two hours, for exactly that amount. With the policy-builder skill, Claude read the
+payment from testnet without asking for a ledger or RPC URL, restated the grant (delegate,
+target, exact amount, one call, expiry about two hours ahead), asked whether it was correct,
+showed the "Confirm before deploy" card and sent the proposal to the wallet only after the
+person confirmed. The person had stated every limit, so no ambiguous constraint needed a
+clarifying question in this session. The wallet regenerated and compared the proposal before
+any deployment.
+
+| Step | Ledger | Result |
+| --- | --- | --- |
+| [Passkey verifier](https://stellar.expert/explorer/testnet/tx/5e4ee80d2cdef0cbf1a17f38f0b50a69e727e30ee03aaca66e69c7d15dbdb077), [account](https://stellar.expert/explorer/testnet/tx/f63730bd84509c65bebcfcf71760d619d699a937889d793b79aad9e50c2caab2) and [funding](https://stellar.expert/explorer/testnet/tx/54a1aea98cb1cdd468e9e5afa39005cdac70df5d971c60467beea063158e20d8) | 5678094–5678096 | Account `CB7JTNGBJ4KHLIKGWLKKQK2VTZO277H4VMTCV56ZR7HW2PRICW2ILSBB`, the passkey its only signer. |
+| [Owner's 0.1 XLM payment](https://stellar.expert/explorer/testnet/tx/6282cbcdf40bb76b49f466ca122c4098be85406238570c0d61e2b7e870e191a8) | 5678107 | Signed with the passkey; the transaction Claude recorded. |
+| Policy [upload](https://stellar.expert/explorer/testnet/tx/ba907170d68db6d4344e39f5e4ac595045745d094b4d456b562728f72e53126e) and [deployment](https://stellar.expert/explorer/testnet/tx/8124765f41a702716c8e139a00a34b87d5f5f5de834bd01e0496359342ecac85) | 5678202–5678203 | Policy `CCEMMKAOEP3XF3XVPTHDKZNJPBZ52GDTXBFPB7UUVZQNAHBAPRB2OVIF`; no permission yet. |
+| Authority review, local checks, live check | 5678216 | The passkey alone controls the rules. The offline layers passed. The live check (signatures expiring at 5678228, simulated, not submitted) was reported on the page as allowing the exact payment and refusing one stroop more; the journal keeps its snapshot, the video its outcome. The wallet waited for those signatures to expire unused. |
+| [Installation](https://stellar.expert/explorer/testnet/tx/4fc66cff765dc67ea21b01f3d5fe9ece0ad785c551d244236f554742530884c1) | 5678242 | Signed with the passkey; rule 1 read back as approved ("Check installed grant": unchanged). |
+| [Automation key's payment](https://stellar.expert/explorer/testnet/tx/d1a31f68095a1710e8b4604958950b93ac7f7cf9f5df92c15c5f5a8684d197eb) | 5678252 | The delegate alone, no passkey. |
+| Same payment again | 5678256 | Refused by the policy, code 7 (call count exceeded), in an enforcing simulation; not submitted. |
+| [Revocation](https://stellar.expert/explorer/testnet/tx/371fe2ff8655ff74aa45e1ce54e7ca3360687894e172b3a999ed4ee5a81bd5d6) | 5678262 | Signed with the passkey; the rule was removed. |
+
+This is the first wallet run with a person's own approvals and the first agent session
+exercised end to end into the wallet; sections 15 and 16 were automation. The person's choices
+are recorded by the video; the backend's journal stays local. One grant shape (an exact native
+transfer, one call) was exercised; revoke-first replacement was not.
+
+## 26. Hosted reference instance acceptance check, 11 November 2026
+
+Gateway's infrastructure team runs a reference instance for the review at
+`https://policy-builder-mcp.dev.eu-north-3.gateway.fm/v1/mcp`: the API container with
+`OZPB_HTTP_LISTEN` and `OZPB_HTTP_ALLOWED_HOSTS` behind their own TLS ingress, testnet only,
+with one bearer token handed to the reviewers. Which image digest runs is the operator's record;
+from outside, the checks below show this toolkit's server answering. Checked at 19:35 UTC:
+
+| Check | Result |
+| --- | --- |
+| No token | `401`, the server's own "missing or invalid bearer token" through the ingress. |
+| `initialize` with the token | `200`; the server identifies as rmcp 2.2.0 and opens a session. |
+| `tools/list` | All 17 tools. |
+| A real tool call | `record_transaction` for the section 25 payment, through the instance's configured testnet RPC source, returned its recording in about one second, with the wallet account as the authorizer. |
+| A browser `Origin` header | `403`. |
+
+This is one acceptance check from one client. Per-client accounts, billing and production
+availability are not offered ([hosted operation](TRANCHE-2-VERIFICATION.md#deviations-and-open-gaps-against-the-phase-2-design)).

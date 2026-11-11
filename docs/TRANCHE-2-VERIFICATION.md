@@ -1,9 +1,10 @@
 # Tranche 2 verification guide
 
 This guide separates reproducible automated checks from the live integration evidence required
-by [architecture §10, Phase 2](architecture.md#10-delivery-plan). A passing command below is
-evidence for the checked revision and named fixtures. It does not establish completion of the
-four-layer harness, wallet integration, hosted service, or three end-to-end walkthroughs.
+by [architecture §10, Phase 2](architecture.md#10-delivery-plan). The crosswalk below maps each
+contracted item to the live evidence that closes it, from the public demonstration on
+11 November 2026, and to the limits it keeps. A passing command further down is evidence for the
+checked revision and named fixtures only.
 Read [SCOPE.md](SCOPE.md) and the [change review plan](CHANGE-REVIEW-PLAN.md) alongside it.
 
 ## Contracted outcome and milestone boundary
@@ -13,30 +14,31 @@ requirements. [Architecture Phase 2](architecture.md#10-delivery-plan) gives the
 design and evidence expectations. Both matter: an implementation limit must be stated against
 that design, rather than silently counted as complete or moved to the next milestone.
 
-| Contracted item | Implementation and retained evidence | Closure still needed |
+| Contracted item | Implementation and retained evidence | Closure and retained limits |
 | --- | --- | --- |
-| Dry-run: original permits and at least five auto-mutated denials revert | Constraint-derived suites, native differential tests, real account-Wasm execution, narrow captured-target execution and live derived-denial reports exist. | Current delivered-revision reports with executed cases, layer/enforcer attribution and explicit unsupported cases. Counts from the reference evaluator alone do not establish Wasm execution. |
-| Claude skill: clarification and confirm-before-deploy | Installed skill, permission-review card, human-invoked install handoff, transcript checker and independently regenerated wallet import exist. | An executed clarification → permission review → explicit confirmation → wallet handoff session. A skill file or scripted CLI import alone does not demonstrate this conversation. |
-| W1: Blend yield claim | Supply-position setup, nonzero claim, withdrawal and historical live derived-denial evidence are recorded in the [protocol walkthrough](WALKTHROUGH-PROTOCOLS.md). A passing run at revision `60e1da70` on 30 October 2026 includes the per-rule account-Wasm report ([testnet evidence §19](TESTNET-EVIDENCE-TRANCHE-2.md#19-controlled-blend-claim-run-30-october-2026)), and another passed at revision `86854cee` on 1 November 2026 ([§21](TESTNET-EVIDENCE-TRANCHE-2.md#21-controlled-blend-claim-run-1-november-2026)); that emission schedule ends on 2 November 2026. | Fresh target/emissions preflight and delivered-revision permit/deny/lifecycle reports. A zero-reward claim is not a passing positive case. |
-| W2: SEP-41 subscription | The [subscription walkthrough](WALKTHROUGH-SEP41.md) composes the generated scope policy and the exact pinned spending-limit policy, with historical live permit/deny and revocation evidence and passing runs at revision `60e1da70` on 30 October 2026 ([testnet evidence §18](TESTNET-EVIDENCE-TRANCHE-2.md#18-controlled-sep-41-run-30-october-2026)) and at revision `86854cee` on 1 November 2026 ([§22](TESTNET-EVIDENCE-TRANCHE-2.md#22-controlled-sep-41-run-1-november-2026)). | Delivered-revision reports; explicitly retain the unsupported composed account-Wasm layer rather than treating native-transfer coverage as composition coverage. |
-| W3: bounded Soroswap | Two independent rules, explicit floor/cap decisions, a code-hash-bound router adapter that keeps the recorded deadline exact (`soroswap-router@2`), route/recipient/function controls and live derived denials exist. A passing run at revision `60e1da70` on 30 October 2026 refused deadline plus one and the maximum deadline with the router-rule policy's code 6 ([testnet evidence §17](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)), as did a passing run at revision `86854cee` on 1 November 2026 ([§23](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026)). | Retain delivered-revision reports, tuple-cross-product applicability/coverage and the development-registry/source-reproduction limit below. |
-| Wallet integration | [Pollywallet integration](POLLYWALLET-INTEGRATION.md) imports, checks, deploys, installs, revokes, replaces (revoke-first) and checks on demand a supported native-transfer grant; automated virtual-passkey testnet runs are retained. | Record current installation, replacement and monitoring behavior and refusals at the delivered revision. Distinguish automated signature mechanics from an actual user's permission decisions. |
-| Hosted testnet endpoint | Authenticated HTTP, per-tool quotas, request cancellation, TLS packaging and disposable build workers have unit, container or containment tests. | A running reachable testnet service, a published self-hostable image and acceptance checks against that deployed service. A container build is not a deployment. |
-| Public demo and video with passing reports | Walkthrough runners and historical records exist. | Assemble the final demonstration, reports and artifact inventory; record and publish the video. This is an explicit deliverable. |
+| Dry-run: original permits and at least five auto-mutated denials revert | Constraint-derived suites, native differential tests, real account-Wasm execution, narrow captured-target execution and live derived-denial reports exist. | Closed. In the [demonstration runs](TESTNET-EVIDENCE-TRANCHE-2.md#24-demonstration-walkthrough-runs-11-november-2026) every walkthrough permitted its recorded call and its derived denials were refused live by their predicted enforcers (W1 5, W2 10, W3 12), after offline account-Wasm reports (W1 19, W3 24 and 20 reverted). Retained limits: see the four-layer row below; cases without a live stand-in stay offline and are listed per run. |
+| Claude skill: clarification and confirm-before-deploy | Installed skill, permission-review card, human-invoked install handoff, transcript checker and independently regenerated wallet import exist. | Closed. A person ran the session in the [wallet demonstration](TESTNET-EVIDENCE-TRANCHE-2.md#25-wallet-run-by-a-person-with-claudes-proposal-11-november-2026): Claude read the recorded payment, restated the grant, asked whether it was correct, showed the confirmation card and handed the proposal to the wallet only after confirmation; the wallet regenerated it independently. Retained: the person stated every limit, so that session needed no clarifying question and did not exercise the skill's [rules for what to ask](../skills/policy-builder/SKILL.md) before synthesis. |
+| W1: Blend yield claim | Supply-position setup, nonzero claim, withdrawal and historical live derived-denial evidence are recorded in the [protocol walkthrough](WALKTHROUGH-PROTOCOLS.md). A passing run at revision `60e1da70` on 30 October 2026 includes the per-rule account-Wasm report ([testnet evidence §19](TESTNET-EVIDENCE-TRANCHE-2.md#19-controlled-blend-claim-run-30-october-2026)), and another passed at revision `86854cee` on 1 November 2026 ([§21](TESTNET-EVIDENCE-TRANCHE-2.md#21-controlled-blend-claim-run-1-november-2026)); that emission schedule ends on 2 November 2026. | Closed by the [11 November run](TESTNET-EVIDENCE-TRANCHE-2.md#24-demonstration-walkthrough-runs-11-november-2026) (nonzero claim, delegated claim, count cap, expiry, removal). Retained limits: no reviewed Blend adapter (the pool hash is `evidence_only`); runs need a live emission schedule (the current one ends 16 November 2026). |
+| W2: SEP-41 subscription | The [subscription walkthrough](WALKTHROUGH-SEP41.md) composes the generated scope policy and the exact pinned spending-limit policy, with historical live permit/deny and revocation evidence and passing runs at revision `60e1da70` on 30 October 2026 ([testnet evidence §18](TESTNET-EVIDENCE-TRANCHE-2.md#18-controlled-sep-41-run-30-october-2026)) and at revision `86854cee` on 1 November 2026 ([§22](TESTNET-EVIDENCE-TRANCHE-2.md#22-controlled-sep-41-run-1-november-2026)). | Closed by the [11 November run](TESTNET-EVIDENCE-TRANCHE-2.md#24-demonstration-walkthrough-runs-11-november-2026) (two charges across windows, composed configuration checks, removal). Retained limit: the composed account-Wasm layer is unsupported; native-transfer coverage is not composition coverage. |
+| W3: bounded Soroswap | Two independent rules, explicit floor/cap decisions, a code-hash-bound router adapter that keeps the recorded deadline exact (`soroswap-router@2`), route/recipient/function controls and live derived denials exist. A passing run at revision `60e1da70` on 30 October 2026 refused deadline plus one and the maximum deadline with the router-rule policy's code 6 ([testnet evidence §17](TESTNET-EVIDENCE-TRANCHE-2.md#17-controlled-soroswap-exact-deadline-run-30-october-2026)), as did a passing run at revision `86854cee` on 1 November 2026 ([§23](TESTNET-EVIDENCE-TRANCHE-2.md#23-controlled-soroswap-exact-deadline-run-1-november-2026)). | Closed by the [11 November run](TESTNET-EVIDENCE-TRANCHE-2.md#24-demonstration-walkthrough-runs-11-november-2026) (all 20 steps of the exact-deadline control set, delegated swap, both count caps, expiry, both removals). Retained limit: the router binding is a development-registry assertion, not source-reproduced. |
+| Wallet integration | [Pollywallet integration](POLLYWALLET-INTEGRATION.md) imports, checks, deploys, installs, revokes, replaces (revoke-first) and checks on demand a supported native-transfer grant; automated virtual-passkey testnet runs are retained. | Closed by the [wallet demonstration](TESTNET-EVIDENCE-TRANCHE-2.md#25-wallet-run-by-a-person-with-claudes-proposal-11-november-2026): a person's passkey created the account, approved the deployment, installed the grant, checked it on demand (unchanged) and revoked it; the automation key used it once and its second use was refused (code 7). Retained limits: one grant shape (exact native transfer); revoke-first replacement has no testnet run. |
+| Hosted testnet endpoint | Authenticated HTTP, per-tool quotas, request cancellation, TLS packaging and disposable build workers have unit, container or containment tests. | Self-hostable images published by digest with the [`v0.2.0-rc.2`](https://github.com/gateway-fm/oz-policy-builder/releases/tag/v0.2.0-rc.2) pre-release; the reference instance for the review at `https://policy-builder-mcp.dev.eu-north-3.gateway.fm/v1/mcp`, behind Gateway's own TLS ingress ([self-hosting](SELF-HOSTING.md#behind-your-own-ingress-instead-of-the-proxy)), passed its [acceptance check](TESTNET-EVIDENCE-TRANCHE-2.md#26-hosted-reference-instance-acceptance-check-11-november-2026). Retained limits: the hosted-operation row below. |
+| Public demo and video with passing reports | Walkthrough runners and historical records exist. | Closed: the [demonstration video](https://drive.google.com/file/d/19juUqgGOpdBtLzDIkTCrkJjh9w68aDkk/view) shows the wallet flow and the three walkthrough reports; [sections 24 and 25](TESTNET-EVIDENCE-TRANCHE-2.md#24-demonstration-walkthrough-runs-11-november-2026) list every transaction and refusal; the demonstration used a local MCP server, and the hosted instance was checked separately ([section 26](TESTNET-EVIDENCE-TRANCHE-2.md#26-hosted-reference-instance-acceptance-check-11-november-2026)). |
 
 The production versioned release (self-hostable; Gateway operates no service),
 security-audit remediation/publication, OpenZeppelin generated-code
 sign-off and a mainnet wallet installation belong to
 [issue #4 / Tranche 3](https://github.com/gateway-fm/oz-policy-builder/issues/4).
-The full documentation/test-suite delivery is also listed there. Tranche 2 still needs the
-usage, test coverage, limitations and reproduction instructions for what it actually ships.
+The full documentation/test-suite delivery is also listed there. For what Tranche 2 ships, the
+usage, limitations and reproduction instructions are the walkthrough, wallet and self-hosting
+guides linked above.
 Monitoring, revocation, stateful-overlap handling and isolated testnet hosting are already
 part of the public Phase 2 design; they are not new mainnet prerequisites added here.
 
 ### Deviations and open gaps against the Phase 2 design
 
 These limits describe the supported surface; they are not passing evidence for missing
-features. The final acceptance record must resolve or explicitly retain each relevant limit.
+features. The crosswalk above retains each one that applies to a contracted item.
 
 | Design area | Actual boundary or remaining gap |
 | --- | --- |
@@ -155,13 +157,13 @@ cargo run --locked -q -p ozpb-cli -- reference-suite --spec docs/examples/subscr
 Review the outcomes and coverage, not only `all_agree`. The checker validates a locally
 generated report's consistency; it does not authenticate a report obtained from another party.
 
-## Evidence still required for milestone acceptance
+## Reviewing the live evidence
 
 The [Phase 2 outcome](architecture.md#10-delivery-plan) includes a public demo and video of
 recording a testnet transaction, generating a policy, reviewing labeled permit/deny evidence
-and the authority check, signing an install with a passkey, and revoking it. Review those
-operations at the actual delivered revision; this guide does not assert that they are all
-available in the current CLI or MCP surface.
+and the authority check, signing an install with a passkey, and revoking it. The demonstration
+on 11 November 2026 performed them ([testnet evidence §24 and §25](TESTNET-EVIDENCE-TRANCHE-2.md#24-demonstration-walkthrough-runs-11-november-2026));
+the table below says what to look for in that evidence or in a run of your own.
 
 The table highlights review areas; architecture §10 is the authoritative, complete acceptance
 scope. Passing the automated subset above does not waive any of its requirements.
