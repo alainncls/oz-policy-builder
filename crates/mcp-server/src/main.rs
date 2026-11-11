@@ -9,7 +9,7 @@
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
-use rmcp::model::{CallToolResult, ServerCapabilities, ServerInfo};
+use rmcp::model::{CallToolResponse, CallToolResult, ServerCapabilities, ServerConfig};
 use rmcp::{tool, tool_handler, tool_router, ServerHandler, ServiceExt};
 
 use ozpb_api_types::{
@@ -529,7 +529,7 @@ impl ServerHandler for PolicyBuilderServer {
         &self,
         request: rmcp::model::CallToolRequestParams,
         context: rmcp::service::RequestContext<rmcp::RoleServer>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
+    ) -> Result<CallToolResponse, rmcp::ErrorData> {
         // Unknown methods keep the router's ordinary error; they do not spend another tool's budget.
         if self.tool_router.has_route(&request.name)
             && self
@@ -540,14 +540,15 @@ impl ServerHandler for PolicyBuilderServer {
             return Ok(tool_err(ToolError::new(
                 ozpb_api_types::ErrorCode::EResourceLimit,
                 "tool request quota exceeded; retry after the current 60-second window",
-            )));
+            ))
+            .into());
         }
         let call = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
         self.tool_router.call(call).await
     }
 
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "OZ Accounts Policy Builder. Record a Stellar transaction, synthesize a \
              minimum-permission OpenZeppelin smart-account policy, evaluate it, run the layer-1 \
              reference suite, generate reviewable Rust, verify generated artifacts offline, and \

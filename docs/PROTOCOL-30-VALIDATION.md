@@ -44,7 +44,7 @@ Historical Protocol-29 captures remain unchanged and are refused for current exe
 Protocol 31 and muxed contract addresses remain unsupported. The off-chain worker still uses
 SDK 30.0.0-rc.1; moving to the stable SDK requires repeating its compatibility gates.
 
-The existing crypto-bigint exception still expires on 10 November 2026. Passing the audited
+This validation does not change the crypto-bigint exception or its expiry. Passing the audited
 dependency gate does not mean that dependency has been fixed; see
 [the reassessed exception](SECURITY-EXCEPTIONS.md).
 

@@ -5,7 +5,7 @@ not a fix to crypto-bigint or a claim of constant-time execution. It requires ac
 the maintainer approving the change. IvanBelyakoff owns reassessment and removal, tracked
 in [issue #94](https://github.com/gateway-fm/oz-policy-builder/issues/94).
 
-The exception expires at **2026-11-10 00:00 UTC**. The required supply-chain gate refuses an
+The exception expires at **2026-12-11 00:00 UTC** (extended on 11 November 2026, below). The required supply-chain gate refuses an
 expired exception and refuses changes to the reviewed affected packages or their direct
 dependents in any of the three workspace lockfiles. Other advisory, source and license
 failures remain failures. The root workspace's reviewed affected-package inventory is empty;
@@ -78,6 +78,25 @@ The locked ML-DSA and ctutils versions are outside their published affected rang
 additional advisory exception is introduced. This is static source/dependency review, not a
 timing or machine-code proof, and it does not fix RUSTSEC-2026-0387. The existing acceptance
 limits and maintainer approval requirement remain in force.
+
+## Expiry extension (11 November 2026)
+
+The exception expired on 10 November with no compatible fixed chain available, so it is
+extended to **11 December 2026 00:00 UTC**. Nothing else changes: the lock inventories, the
+reviewed scope and the limits below are those of the 4 November reassessment, and the guard
+still refuses any change to them.
+
+Rechecked on crates.io on 11 November 2026: the newest published Soroban host, 30.0.0,
+still requires p256 ^0.13.2, k256 ^0.13, ecdsa ^0.16.7 and elliptic-curve ^0.13.5, which
+select crypto-bigint 0.5.x. The fixed crypto-bigint range (0.7.6 and later) is used by the
+elliptic-curve 0.14 line (p256 and k256 0.14), which no published Soroban host depends on.
+No project change since the 4 November reassessment adds a secret-scalar, signing or ECDH
+use of the affected arithmetic; project signing still uses Ed25519.
+
+The dated sections above state the expiry that was in force when each was written. This is
+continued bounded risk acceptance, not remediation; the maintainer approving this change
+accepts it, and [issue #94](https://github.com/gateway-fm/oz-policy-builder/issues/94)
+stays open until the exception can be removed.
 
 ## Limits and removal
 
