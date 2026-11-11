@@ -51,9 +51,9 @@ yanked = "deny"
 # scripts/check-advisory-exception.py; it is risk acceptance, not a library fix.
 ignore = [
     # Temporary acceptance for the exact reviewed Soroban dependency graphs.
-    # Expires 2026-11-10 UTC; dependency changes require reassessment.
+    # Expires 2026-12-11 UTC; dependency changes require reassessment.
     # See docs/SECURITY-EXCEPTIONS.md for applicability, limitations and removal criteria.
-    { id = "RUSTSEC-2026-0387", reason = "temporary risk acceptance through 2026-11-09 for pinned Soroban native verification/recovery; no private-key use identified; expiry and dependency inventory enforced by scripts/check-advisory-exception.py" },
+    { id = "RUSTSEC-2026-0387", reason = "temporary risk acceptance through 2026-12-10 for pinned Soroban native verification/recovery; no private-key use identified; expiry and dependency inventory enforced by scripts/check-advisory-exception.py" },
     # `paste` is a build-time proc-macro helper pulled transitively by the Soroban SDK
     # macro stack (contracts workspace only). RUSTSEC-2024-0436 is an unmaintained notice,
     # not a vulnerability; there is no code path we can change to drop it. Revisit when

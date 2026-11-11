@@ -93,12 +93,12 @@ account or policy is automatically upgraded by this rollout.
 ## Security follow-up
 
 This update does **not** resolve [RUSTSEC-2026-0387](https://rustsec.org/advisories/RUSTSEC-2026-0387.html).
-As checked on 28 October 2026, the published Soroban hosts through 30.0.0 still require
+As checked on 28 October and again on 11 November 2026, the published Soroban hosts through 30.0.0 still require
 elliptic-curve 0.13 / crypto-bigint 0.5.5. The advisory's fixed range begins at 0.7.6;
 a direct update to that version cannot satisfy the old dependency requirement. No unsupported
 cryptographic fork is introduced here.
 
-The [temporary exception](SECURITY-EXCEPTIONS.md) retains its **10 November 2026** expiry.
+The [temporary exception](SECURITY-EXCEPTIONS.md) stays bounded by the expiry recorded there.
 [Issue #94](https://github.com/gateway-fm/oz-policy-builder/issues/94) remains open until all
 affected native/test graphs use a compatible fixed chain, the audits pass without the ignore,
 and the exception can be removed. A full account 0.8 migration additionally needs explicitly
