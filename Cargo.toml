@@ -34,7 +34,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0-rc.2"
 edition = "2021"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/gateway-fm/oz-policy-builder"

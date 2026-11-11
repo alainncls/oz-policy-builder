@@ -1130,7 +1130,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "ozpb-api-types"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "ozpb-domain",
  "schemars 1.2.1",
@@ -1140,7 +1140,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-build-runner"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "base64",
  "nix",
@@ -1158,7 +1158,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-call-surface-core"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "hex",
  "ozpb-domain",
@@ -1170,7 +1170,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-cli"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "anyhow",
  "base64",
@@ -1194,7 +1194,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-codegen"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "base64",
  "hex",
@@ -1211,7 +1211,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-domain"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "hex",
  "proptest",
@@ -1224,7 +1224,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-evaluator"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "hex",
  "ozpb-domain",
@@ -1237,7 +1237,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-harness"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "ozpb-domain",
  "ozpb-evaluator",
@@ -1251,7 +1251,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-mcp-server"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -1275,7 +1275,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-policy-spec"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "hex",
  "ozpb-domain",
@@ -1288,7 +1288,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-recorder-core"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "ozpb-domain",
  "serde",
@@ -1299,7 +1299,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-registry"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "ed25519-dalek",
  "hex",
@@ -1312,7 +1312,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-source-bundle"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "ozpb-recorder-core",
  "serde",
@@ -1322,7 +1322,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-source-rpc"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "hex",
  "ozpb-call-surface-core",
@@ -1340,7 +1340,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-synthesizer"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "hex",
  "ozpb-domain",
@@ -1355,7 +1355,7 @@ dependencies = [
 
 [[package]]
 name = "ozpb-toolkit"
-version = "0.1.0"
+version = "0.2.0-rc.2"
 dependencies = [
  "base64",
  "ed25519-dalek",
